@@ -13,7 +13,9 @@ const state = {
 
 // DOM Elements
 const elements = {
-    heroSelect: document.getElementById('hero-select'),
+    heroSelectWrapper: document.getElementById('hero-select-wrapper'),
+    heroSelectTrigger: document.getElementById('hero-select-trigger'),
+    heroSelectDropdown: document.getElementById('hero-select-dropdown'),
     networthButtons: document.querySelectorAll('.networth-btn'),
     tiersContainer: document.getElementById('tiers-container'),
     buildSlots: document.getElementById('build-slots'),
@@ -56,28 +58,67 @@ async function init() {
 }
 
 function populateHeroSelect() {
-    // Sort heroes by name
-    const sortedHeroes = [...state.heroes].sort((a, b) =>
-        a.name.localeCompare(b.name)
-    );
+    // Sort heroes by name, filter to playable heroes
+    const sortedHeroes = [...state.heroes]
+        .filter(h => h.player_selectable && !h.disabled)
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-    elements.heroSelect.innerHTML = '<option value="">Select a hero...</option>';
+    elements.heroSelectDropdown.innerHTML = '';
     sortedHeroes.forEach(hero => {
-        const option = document.createElement('option');
-        option.value = hero.id;
-        option.textContent = hero.name;
-        elements.heroSelect.appendChild(option);
+        const option = document.createElement('div');
+        option.className = 'hero-option';
+        option.dataset.heroId = hero.id;
+
+        const iconUrl = hero.images?.icon_image_small || '';
+        option.innerHTML = `
+            <img src="${iconUrl}" alt="${hero.name}" loading="lazy">
+            <span>${hero.name}</span>
+        `;
+        elements.heroSelectDropdown.appendChild(option);
     });
 }
 
+function toggleHeroDropdown(open) {
+    const isOpen = open ?? elements.heroSelectDropdown.classList.contains('hidden');
+    elements.heroSelectDropdown.classList.toggle('hidden', !isOpen);
+    elements.heroSelectTrigger.classList.toggle('open', isOpen);
+}
+
+function selectHero(heroId) {
+    const hero = state.heroes.find(h => h.id === heroId);
+    if (!hero) return;
+
+    // Update trigger to show selected hero
+    const iconUrl = hero.images?.icon_image_small || '';
+    elements.heroSelectTrigger.querySelector('.hero-select-text').innerHTML = `
+        <img src="${iconUrl}" alt="${hero.name}">
+        <span>${hero.name}</span>
+    `;
+
+    // Close dropdown and load items
+    toggleHeroDropdown(false);
+    loadHeroItems(heroId);
+}
+
 function setupEventListeners() {
-    // Hero selection
-    elements.heroSelect.addEventListener('change', async (e) => {
-        const heroId = parseInt(e.target.value, 10);
-        if (heroId) {
-            await loadHeroItems(heroId);
-        } else {
-            clearItems();
+    // Hero dropdown toggle
+    elements.heroSelectTrigger.addEventListener('click', () => {
+        toggleHeroDropdown();
+    });
+
+    // Hero selection from dropdown
+    elements.heroSelectDropdown.addEventListener('click', (e) => {
+        const option = e.target.closest('.hero-option');
+        if (option) {
+            const heroId = parseInt(option.dataset.heroId, 10);
+            selectHero(heroId);
+        }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!elements.heroSelectWrapper.contains(e.target)) {
+            toggleHeroDropdown(false);
         }
     });
 

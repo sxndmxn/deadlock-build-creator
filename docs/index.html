@@ -10,13 +10,12 @@
     <div class="container">
         <header class="header">
             <h1>Deadlock Build Creator</h1>
-            <div class="controls">
-                <div class="control-group">
-                    <label for="hero-select">Hero</label>
-                    <select id="hero-select">
-                        <option value="">Select a hero...</option>
-                    </select>
+            <div class="hero-select-wrapper" id="hero-select-wrapper">
+                <div class="hero-select-trigger" id="hero-select-trigger">
+                    <span class="hero-select-text">Select a hero...</span>
+                    <span class="hero-select-arrow">▼</span>
                 </div>
+                <div class="hero-select-dropdown hidden" id="hero-select-dropdown"></div>
             </div>
         </header>
 
