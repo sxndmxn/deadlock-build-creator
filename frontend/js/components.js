@@ -127,6 +127,39 @@ function createItemCard(item) {
 }
 
 /**
+ * Create a compact icon-only card for condensed view
+ * @param {Object} item - The item data
+ * @returns {HTMLElement}
+ */
+function createIconCard(item) {
+    const card = document.createElement('div');
+    card.className = 'icon-card';
+    card.dataset.itemId = item.item_id;
+
+    // Calculate overall winrate for tooltip
+    const totalMatches = item.matches_total || 0;
+    let overallWinrate = 0;
+    if (totalMatches > 0) {
+        let totalWins = 0;
+        for (const data of Object.values(item.winrates_by_networth)) {
+            totalWins += data.wins || 0;
+        }
+        overallWinrate = totalWins / totalMatches;
+    }
+
+    const tooltipText = `${item.name} - ${formatPercent(overallWinrate)}`;
+
+    if (item.image) {
+        card.innerHTML = `<img src="${item.image}" alt="${escapeHtml(item.name)}" title="${escapeHtml(tooltipText)}">`;
+    } else {
+        card.textContent = item.name.substring(0, 2);
+        card.title = tooltipText;
+    }
+
+    return card;
+}
+
+/**
  * Create bucket rows showing winrate at each networth bracket
  * @param {Object} winratesByNetworth
  * @param {number|null} bestBucket - The best bucket to highlight
@@ -699,14 +732,72 @@ function getRecommendedBuild(allItems) {
     return itemsWithWindows.slice(0, 12).map(x => x.item);
 }
 
+/**
+ * Check if an item's purchase window overlaps with a phase range
+ */
+function windowOverlapsPhase(window, phaseStart, phaseEnd) {
+    if (!window) return false;
+    return window.start <= phaseEnd && window.end >= phaseStart;
+}
+
+/**
+ * Render items into a phase column
+ * Shows items whose optimal purchase window overlaps with this phase
+ * Phase view always shows compact icons for quick mid-game reference
+ * @param {string} phaseKey - e.g., "0-5000", "5000-10000"
+ * @param {Array} allItems - All items across all tiers
+ */
+function renderPhaseItems(phaseKey, allItems) {
+    const container = document.getElementById(`phase-${phaseKey}-items`);
+    if (!container) return;
+
+    // Parse phase range
+    const [phaseStart, phaseEnd] = phaseKey.split('-').map(Number);
+
+    // Find items whose purchase window overlaps this phase
+    const itemsInPhase = allItems
+        .map(item => {
+            const window = findPurchaseWindow(item);
+            return { item, window };
+        })
+        .filter(({ window }) => windowOverlapsPhase(window, phaseStart, phaseEnd))
+        .filter(({ item }) => getBestBucketMatches(item) >= 1000);
+
+    // Sort by peak winrate in this phase (descending)
+    itemsInPhase.sort((a, b) => {
+        const wrA = a.window ? a.window.peakWinrate : 0;
+        const wrB = b.window ? b.window.peakWinrate : 0;
+        return wrB - wrA;
+    });
+
+    // Always use condensed icon layout for phase view
+    container.classList.add('condensed');
+
+    container.innerHTML = '';
+    itemsInPhase.forEach(({ item }) => {
+        container.appendChild(createIconCard(item));
+    });
+}
+
+/**
+ * Render all phase columns (always uses icon view)
+ * @param {Array} allItems - All items across all tiers
+ */
+function renderAllPhases(allItems) {
+    const phases = ['0-5000', '5000-10000', '10000-15000', '15000-20000', '20000-50000'];
+    phases.forEach(phase => renderPhaseItems(phase, allItems));
+}
+
 // Export for use in app.js
 const Components = {
     createItemCard,
+    createIconCard,
     createModalStats,
     createBuildSlot,
     renderTierItems,
     renderBuildSlots,
     renderTimeline,
+    renderAllPhases,
     getRecommendedBuild,
     formatPercent,
     formatNumber,

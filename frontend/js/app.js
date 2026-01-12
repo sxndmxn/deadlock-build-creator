@@ -8,6 +8,7 @@ const state = {
     itemData: null,  // { hero_id, hero_name, tiers: { "1": [...], "2": [...], ... } }
     build: Array(12).fill(null),  // 12 slots
     isLoading: false,
+    viewMode: 'tier',  // 'tier' or 'phase'
 };
 
 // DOM Elements
@@ -31,6 +32,8 @@ const elements = {
     timelineSection: document.getElementById('timeline-section'),
     timelineItems: document.getElementById('timeline-items'),
     autoFillBuild: document.getElementById('auto-fill-build'),
+    viewButtons: document.querySelectorAll('.view-btn'),
+    phasesContainer: document.getElementById('phases-container'),
 };
 
 // Initialize application
@@ -134,6 +137,35 @@ function setupEventListeners() {
         }
     });
 
+    // View toggle (By Tier / By Phase)
+    elements.viewButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.dataset.view;
+            setViewMode(view);
+        });
+    });
+
+    // Phase container item clicks (delegated) - handles both full cards and icon cards
+    elements.phasesContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('.item-card');
+        const iconCard = e.target.closest('.icon-card');
+
+        if (card) {
+            const itemId = parseInt(card.dataset.itemId, 10);
+            handleItemClick(itemId, e.shiftKey);
+        } else if (iconCard) {
+            const itemId = parseInt(iconCard.dataset.itemId, 10);
+            // Icon cards: click adds to build, shift+click opens modal
+            if (e.shiftKey) {
+                const item = findItem(itemId);
+                if (item) showItemModal(item);
+            } else {
+                const item = findItem(itemId);
+                if (item) addToBuild(item);
+            }
+        }
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -186,13 +218,42 @@ function renderAllTiers() {
     elements.heroWinrate.textContent = Components.formatPercent(overallWinrate);
     elements.itemsTracked.textContent = itemCount;
 
-    // Render timeline with all items
+    // Collect all items for timeline and phase view
     const allItems = [];
     ['1', '2', '3', '4'].forEach(tier => {
         const items = state.itemData.tiers[tier] || [];
         allItems.push(...items);
     });
+
+    // Render timeline
     Components.renderTimeline(allItems);
+
+    // Render phase columns (always shows icons)
+    Components.renderAllPhases(allItems);
+
+    // Apply current view mode
+    applyViewMode();
+}
+
+function setViewMode(mode) {
+    state.viewMode = mode;
+
+    // Update button states
+    elements.viewButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === mode);
+    });
+
+    applyViewMode();
+}
+
+function applyViewMode() {
+    if (state.viewMode === 'tier') {
+        elements.tiersContainer.classList.remove('hidden');
+        elements.phasesContainer.classList.add('hidden');
+    } else {
+        elements.tiersContainer.classList.add('hidden');
+        elements.phasesContainer.classList.remove('hidden');
+    }
 }
 
 function selectNetworth(networth) {
@@ -335,8 +396,15 @@ function clearItems() {
         const container = document.getElementById(`tier-${tier}-items`);
         if (container) container.innerHTML = '';
     });
+    // Clear phase columns
+    const phases = ['0-5000', '5000-10000', '10000-15000', '15000-20000', '20000-50000'];
+    phases.forEach(phase => {
+        const container = document.getElementById(`phase-${phase}-items`);
+        if (container) container.innerHTML = '';
+    });
     elements.statsPanel.classList.add('hidden');
     elements.timelineSection.classList.add('hidden');
+    elements.phasesContainer.classList.add('hidden');
 }
 
 function showLoading() {

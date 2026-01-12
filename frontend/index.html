@@ -39,6 +39,10 @@
                     <span class="stat-chip-label">Items Tracked</span>
                     <span class="stat-chip-value" id="items-tracked">-</span>
                 </div>
+                <div class="view-toggle">
+                    <button class="view-btn active" data-view="tier">By Tier</button>
+                    <button class="view-btn" data-view="phase">By Phase</button>
+                </div>
             </div>
 
             <div class="tiers-container" id="tiers-container">
@@ -57,6 +61,29 @@
                 <div class="tier-column" data-tier="4">
                     <h2 class="tier-header">Tier 4 <span class="tier-cost">(6,200+)</span></h2>
                     <div class="items-list" id="tier-4-items"></div>
+                </div>
+            </div>
+
+            <div class="phases-container hidden" id="phases-container">
+                <div class="phase-column" data-phase="0-5000">
+                    <h2 class="phase-header">0-5k</h2>
+                    <div class="items-list" id="phase-0-5000-items"></div>
+                </div>
+                <div class="phase-column" data-phase="5000-10000">
+                    <h2 class="phase-header">5-10k</h2>
+                    <div class="items-list" id="phase-5000-10000-items"></div>
+                </div>
+                <div class="phase-column" data-phase="10000-15000">
+                    <h2 class="phase-header">10-15k</h2>
+                    <div class="items-list" id="phase-10000-15000-items"></div>
+                </div>
+                <div class="phase-column" data-phase="15000-20000">
+                    <h2 class="phase-header">15-20k</h2>
+                    <div class="items-list" id="phase-15000-20000-items"></div>
+                </div>
+                <div class="phase-column" data-phase="20000-50000">
+                    <h2 class="phase-header">20k+</h2>
+                    <div class="items-list" id="phase-20000-50000-items"></div>
                 </div>
             </div>
 

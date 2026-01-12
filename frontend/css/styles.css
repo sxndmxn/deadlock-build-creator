@@ -210,6 +210,102 @@ body {
     color: var(--text-primary);
 }
 
+/* View toggle */
+.view-toggle {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.view-btn {
+    padding: 8px 16px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.view-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.view-btn.active {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+}
+
+/* Density toggle (cards vs icons) */
+.density-toggle {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.density-toggle.hidden {
+    display: none;
+}
+
+.density-btn {
+    padding: 8px 16px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.density-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.density-btn.active {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+}
+
+/* Icon-only item card */
+.icon-card {
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    transition: all 0.15s;
+}
+
+.icon-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 2px;
+}
+
+.icon-card:hover {
+    border-color: var(--accent-color);
+    transform: scale(1.1);
+    z-index: 1;
+}
+
+/* Condensed items list layout */
+.items-list.condensed {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+    max-height: none;
+}
+
 .tiers-container {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -234,6 +330,36 @@ body {
 .tier-column[data-tier="2"] .tier-header { color: var(--tier2-color); }
 .tier-column[data-tier="3"] .tier-header { color: var(--tier3-color); }
 .tier-column[data-tier="4"] .tier-header { color: var(--tier4-color); }
+
+/* Phase columns (By Phase view) */
+.phases-container {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+}
+
+.phases-container.hidden {
+    display: none;
+}
+
+.tiers-container.hidden {
+    display: none;
+}
+
+.phase-column {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.phase-header {
+    padding: 12px 16px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--accent-color);
+}
 
 .tier-cost {
     font-weight: 400;
