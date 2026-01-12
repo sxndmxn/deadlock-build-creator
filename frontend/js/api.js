@@ -95,7 +95,7 @@ async function fetchBuildCreatorItems(heroId) {
                 name: item.name,
                 tier: item.item_tier,
                 slot: item.item_slot_type || null,
-                image: item.image || null,
+                image: item.shop_image || item.image || null,
             });
         });
 

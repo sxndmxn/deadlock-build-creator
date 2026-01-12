@@ -7,9 +7,10 @@
  * @returns {{bucket: number, winrate: number, matches: number, rangeStart: number, rangeEnd: number}|null}
  */
 function findBestBucket(winratesByNetworth, totalMatches) {
-    // Only consider buckets with >= 5% of total matches
+    // Consider buckets with >= 5% of total matches OR >= 1000 absolute matches
     const minPercentage = 0.05;
-    const minMatches = totalMatches * minPercentage;
+    const percentageMin = totalMatches * minPercentage;
+    const absoluteMin = 1000;
 
     const buckets = Object.entries(winratesByNetworth)
         .map(([key, data]) => ({
@@ -17,7 +18,7 @@ function findBestBucket(winratesByNetworth, totalMatches) {
             winrate: data?.winrate || 0,
             matches: data?.matches || 0
         }))
-        .filter(b => !isNaN(b.bucket) && b.matches >= minMatches)
+        .filter(b => !isNaN(b.bucket) && (b.matches >= percentageMin || b.matches >= absoluteMin))
         .sort((a, b) => a.bucket - b.bucket);
 
     if (buckets.length === 0) return null;
@@ -104,6 +105,9 @@ function createItemCard(item) {
         ? `<img class="item-image" src="${item.image}" alt="${escapeHtml(item.name)}" loading="lazy">`
         : '';
 
+    // Calculate average souls at purchase from bucket data
+    const avgSouls = calculateAvgSouls(item.winrates_by_networth);
+
     card.innerHTML = `
         <div class="item-header">
             ${imageHtml}
@@ -114,7 +118,7 @@ function createItemCard(item) {
             ${bucketRows}
         </div>
         <div class="item-footer">
-            <span class="item-buy-time">Avg buy: ${formatTime(item.avg_buy_time_s)}</span>
+            <span class="item-avg-souls">Avg souls: ${formatSouls(avgSouls)}</span>
             <span class="item-matches ${sampleClass}">${formatNumber(totalMatches)} total</span>
         </div>
     `;
@@ -129,9 +133,10 @@ function createItemCard(item) {
  * @returns {string} HTML string
  */
 function createBucketRows(winratesByNetworth, bestBucket, totalMatches) {
-    // Sort buckets by networth value, only show buckets with >= 5% of total matches
+    // Show buckets with >= 5% of total matches OR >= 1000 absolute matches
     const minPercentage = 0.05;
-    const minMatches = totalMatches * minPercentage;
+    const percentageMin = totalMatches * minPercentage;
+    const absoluteMin = 1000;
 
     const buckets = Object.entries(winratesByNetworth)
         .map(([key, data]) => ({
@@ -139,7 +144,7 @@ function createBucketRows(winratesByNetworth, bestBucket, totalMatches) {
             winrate: data.winrate,
             matches: data.matches
         }))
-        .filter(b => !isNaN(b.networth) && b.matches >= minMatches)
+        .filter(b => !isNaN(b.networth) && (b.matches >= percentageMin || b.matches >= absoluteMin))
         .sort((a, b) => a.networth - b.networth);
 
     if (buckets.length === 0) {
@@ -275,10 +280,12 @@ function createModalStats(item) {
         `;
     });
 
+    const avgSouls = calculateAvgSouls(item.winrates_by_networth);
+
     html += `
         <div class="stat-row">
-            <span class="stat-label">Avg Buy Time</span>
-            <span class="stat-value">${formatTime(item.avg_buy_time_s)}</span>
+            <span class="stat-label">Avg Souls</span>
+            <span class="stat-value">${formatSouls(avgSouls)}</span>
         </div>
         <div class="stat-row">
             <span class="stat-label">Total Matches</span>
@@ -421,6 +428,44 @@ function calculateOverallWinrate(winratesByNetworth) {
 }
 
 /**
+ * Calculate average souls at purchase (weighted by matches in each bucket)
+ * Bucket midpoints: 0→500, 1k→1.5k, 2k→2.5k, 3k→4k, 5k→7.5k, 10k→15k
+ */
+function calculateAvgSouls(winratesByNetworth) {
+    const bucketMidpoints = {
+        '0': 500,
+        '1000': 1500,
+        '2000': 2500,
+        '3000': 4000,
+        '5000': 7500,
+        '10000': 15000,
+    };
+
+    let weightedSum = 0;
+    let totalMatches = 0;
+
+    for (const [bucket, data] of Object.entries(winratesByNetworth)) {
+        const midpoint = bucketMidpoints[bucket];
+        if (midpoint && data.matches) {
+            weightedSum += midpoint * data.matches;
+            totalMatches += data.matches;
+        }
+    }
+
+    return totalMatches > 0 ? weightedSum / totalMatches : 0;
+}
+
+/**
+ * Format souls value
+ */
+function formatSouls(souls) {
+    if (souls >= 1000) {
+        return `${(souls / 1000).toFixed(1)}k`;
+    }
+    return Math.round(souls).toString();
+}
+
+/**
  * Render build slots
  * @param {Array} buildItems - Array of items in the build (can have nulls)
  */
@@ -481,6 +526,179 @@ function formatTime(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Timeline functions
+
+/**
+ * Find the optimal purchase window for an item
+ * Window = contiguous range around the peak where winrate stays good
+ */
+function findPurchaseWindow(item) {
+    const buckets = Object.entries(item.winrates_by_networth)
+        .map(([k, v]) => ({
+            networth: parseInt(k, 10),
+            winrate: v.winrate,
+            matches: v.matches
+        }))
+        .filter(b => !isNaN(b.networth) && b.matches >= 500)
+        .sort((a, b) => a.networth - b.networth);
+
+    if (buckets.length === 0) return null;
+
+    // Only consider buckets up to 25k for finding the peak
+    // Late game data (30k+) has survivorship bias and isn't useful for purchase timing
+    const maxNetworthForPeak = 25000;
+    const relevantBuckets = buckets.filter(b => b.networth <= maxNetworthForPeak);
+
+    // If no relevant buckets, fall back to all buckets
+    const searchBuckets = relevantBuckets.length > 0 ? relevantBuckets : buckets;
+
+    // Find the peak bucket (highest winrate) within relevant range
+    let peakIndex = 0;
+    for (let i = 1; i < searchBuckets.length; i++) {
+        if (searchBuckets[i].winrate > searchBuckets[peakIndex].winrate) {
+            peakIndex = i;
+        }
+    }
+
+    const peak = searchBuckets[peakIndex];
+
+    // Find this peak in the full buckets array for expansion
+    const fullPeakIndex = buckets.findIndex(b => b.networth === peak.networth);
+
+    const threshold = peak.winrate - 0.03; // Window includes buckets within 3% of peak
+
+    // Expand left from peak while winrate stays above threshold
+    let startIndex = fullPeakIndex;
+    while (startIndex > 0 && buckets[startIndex - 1].winrate >= threshold) {
+        startIndex--;
+    }
+
+    // Expand right from peak while winrate stays above threshold
+    // But cap at reasonable networth (don't extend window past 30k)
+    let endIndex = fullPeakIndex;
+    while (endIndex < buckets.length - 1 &&
+           buckets[endIndex + 1].winrate >= threshold &&
+           buckets[endIndex + 1].networth <= 30000) {
+        endIndex++;
+    }
+
+    return {
+        start: buckets[startIndex].networth,
+        end: buckets[endIndex].networth,
+        peakWinrate: peak.winrate,
+        peakBucket: peak.networth
+    };
+}
+
+/**
+ * Render the timeline axis (0k to 50k markers)
+ */
+function renderTimelineAxis() {
+    const container = document.getElementById('timeline-axis');
+    if (!container) return;
+
+    const markers = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+    container.innerHTML = markers.map(k =>
+        `<span class="timeline-axis-marker">${k}k</span>`
+    ).join('');
+}
+
+/**
+ * Create a timeline item bar element
+ */
+function createTimelineItem(item, window, maxNetworth = 50000) {
+    const row = document.createElement('div');
+    row.className = 'timeline-item';
+    row.dataset.itemId = item.item_id;
+
+    // Calculate bar position and width as percentages
+    const startPercent = (window.start / maxNetworth) * 100;
+    const endPercent = ((window.end + 1000) / maxNetworth) * 100; // +1000 to give width
+    const widthPercent = Math.max(endPercent - startPercent, 2); // min 2% width
+
+    // Calculate brightness based on winrate (0.4 to 1.0)
+    // 46% winrate = 0.4 brightness (dark), 54%+ = 1.0 brightness (bright)
+    const wr = window.peakWinrate;
+    const brightness = Math.min(1, Math.max(0.4, 0.4 + (wr - 0.46) * 7.5));
+
+    const imageHtml = item.image
+        ? `<img class="timeline-item-img" src="${item.image}" alt="${escapeHtml(item.name)}">`
+        : '';
+
+    row.innerHTML = `
+        <div class="timeline-item-info">
+            ${imageHtml}
+            <span class="timeline-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+        </div>
+        <div class="timeline-item-bar-container">
+            <div class="timeline-item-bar tier-${item.tier}"
+                 style="left: ${startPercent}%; width: ${widthPercent}%; filter: brightness(${brightness.toFixed(2)});"
+                 title="${escapeHtml(item.name)}: ${formatPercent(window.peakWinrate)} at ${formatSouls(window.peakBucket)}">
+                ${formatPercent(window.peakWinrate)}
+            </div>
+        </div>
+    `;
+
+    return row;
+}
+
+/**
+ * Render the purchase timeline with all items
+ */
+function renderTimeline(allItems) {
+    const container = document.getElementById('timeline-items');
+    const section = document.getElementById('timeline-section');
+    if (!container || !section) return;
+
+    // Render axis
+    renderTimelineAxis();
+
+    // Calculate windows for all items
+    const itemsWithWindows = allItems
+        .map(item => {
+            const window = findPurchaseWindow(item);
+            return window ? { item, window } : null;
+        })
+        .filter(x => x !== null)
+        // Only show items with good sample size
+        .filter(x => getBestBucketMatches(x.item) >= 1000)
+        // Sort by window start (earliest purchases first)
+        .sort((a, b) => a.window.start - b.window.start);
+
+    if (itemsWithWindows.length === 0) {
+        container.innerHTML = '<div class="timeline-empty">No items with sufficient data</div>';
+        section.classList.remove('hidden');
+        return;
+    }
+
+    // Render items
+    container.innerHTML = '';
+    itemsWithWindows.forEach(({ item, window }) => {
+        container.appendChild(createTimelineItem(item, window));
+    });
+
+    section.classList.remove('hidden');
+
+    return itemsWithWindows;
+}
+
+/**
+ * Get recommended items for auto-fill (top items from timeline)
+ */
+function getRecommendedBuild(allItems) {
+    const itemsWithWindows = allItems
+        .map(item => {
+            const window = findPurchaseWindow(item);
+            return window ? { item, window } : null;
+        })
+        .filter(x => x !== null)
+        .filter(x => getBestBucketMatches(x.item) >= 1000)
+        .sort((a, b) => a.window.start - b.window.start);
+
+    // Take top 12 items spread across the networth range
+    return itemsWithWindows.slice(0, 12).map(x => x.item);
+}
+
 // Export for use in app.js
 const Components = {
     createItemCard,
@@ -488,6 +706,8 @@ const Components = {
     createBuildSlot,
     renderTierItems,
     renderBuildSlots,
+    renderTimeline,
+    getRecommendedBuild,
     formatPercent,
     formatNumber,
     formatNetworth,

@@ -28,6 +28,9 @@ const elements = {
     totalMatches: document.getElementById('total-matches'),
     heroWinrate: document.getElementById('hero-winrate'),
     itemsTracked: document.getElementById('items-tracked'),
+    timelineSection: document.getElementById('timeline-section'),
+    timelineItems: document.getElementById('timeline-items'),
+    autoFillBuild: document.getElementById('auto-fill-build'),
 };
 
 // Initialize application
@@ -115,6 +118,22 @@ function setupEventListeners() {
     elements.clearBuild.addEventListener('click', clearBuild);
     elements.exportBuild.addEventListener('click', exportBuild);
 
+    // Auto-fill build from timeline
+    elements.autoFillBuild.addEventListener('click', autoFillBuild);
+
+    // Timeline item clicks (delegated)
+    elements.timelineItems.addEventListener('click', (e) => {
+        const bar = e.target.closest('.timeline-item-bar');
+        const row = e.target.closest('.timeline-item');
+        if (bar && row) {
+            const itemId = parseInt(row.dataset.itemId, 10);
+            const item = findItem(itemId);
+            if (item) {
+                addToBuild(item);
+            }
+        }
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -166,6 +185,14 @@ function renderAllTiers() {
     elements.totalMatches.textContent = Components.formatNumber(totalMatches);
     elements.heroWinrate.textContent = Components.formatPercent(overallWinrate);
     elements.itemsTracked.textContent = itemCount;
+
+    // Render timeline with all items
+    const allItems = [];
+    ['1', '2', '3', '4'].forEach(tier => {
+        const items = state.itemData.tiers[tier] || [];
+        allItems.push(...items);
+    });
+    Components.renderTimeline(allItems);
 }
 
 function selectNetworth(networth) {
@@ -248,6 +275,39 @@ function clearBuild() {
     showToast('Build cleared');
 }
 
+function autoFillBuild() {
+    if (!state.itemData) {
+        showToast('Select a hero first', 'warning');
+        return;
+    }
+
+    // Get all items
+    const allItems = [];
+    ['1', '2', '3', '4'].forEach(tier => {
+        const items = state.itemData.tiers[tier] || [];
+        allItems.push(...items);
+    });
+
+    // Get recommended build
+    const recommended = Components.getRecommendedBuild(allItems);
+
+    if (recommended.length === 0) {
+        showToast('No items with sufficient data', 'warning');
+        return;
+    }
+
+    // Clear and fill build
+    state.build = Array(12).fill(null);
+    recommended.forEach((item, i) => {
+        if (i < 12) {
+            state.build[i] = item;
+        }
+    });
+
+    Components.renderBuildSlots(state.build);
+    showToast(`Auto-filled ${recommended.length} items`, 'success');
+}
+
 function exportBuild() {
     const items = state.build.filter(item => item !== null);
 
@@ -276,6 +336,7 @@ function clearItems() {
         if (container) container.innerHTML = '';
     });
     elements.statsPanel.classList.add('hidden');
+    elements.timelineSection.classList.add('hidden');
 }
 
 function showLoading() {
