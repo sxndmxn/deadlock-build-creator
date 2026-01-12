@@ -2,7 +2,7 @@ use cached::TimedCache;
 use cached::proc_macro::cached;
 use tracing::debug;
 
-use crate::services::assets::types::{AssetsHero, AssetsRanks};
+use crate::services::assets::types::{AssetsHero, AssetsItem, AssetsRanks};
 
 /// Client for interacting with the Deadlock assets API
 #[derive(Clone)]
@@ -29,6 +29,12 @@ impl AssetsClient {
     pub(crate) async fn fetch_ranks(&self) -> reqwest::Result<Vec<AssetsRanks>> {
         debug!("Fetching ranks from assets API");
         fetch_ranks_cached(&self.http_client, &self.base_url).await
+    }
+
+    /// Fetch items from the assets API
+    pub(crate) async fn fetch_items(&self) -> reqwest::Result<Vec<AssetsItem>> {
+        debug!("Fetching items from assets API");
+        fetch_items_cached(&self.http_client, &self.base_url).await
     }
 
     /// Find a hero ID by name
@@ -97,6 +103,25 @@ async fn fetch_ranks_cached(
 ) -> reqwest::Result<Vec<AssetsRanks>> {
     http_client
         .get(format!("{base_url}/v2/ranks"))
+        .send()
+        .await?
+        .json()
+        .await
+}
+
+#[cached(
+    ty = "TimedCache<u8, Vec<AssetsItem>>",
+    create = "{ TimedCache::with_lifespan(std::time::Duration::from_secs(60 * 60)) }",
+    result = true,
+    convert = "{ 0 }",
+    sync_writes = "default"
+)]
+async fn fetch_items_cached(
+    http_client: &reqwest::Client,
+    base_url: &str,
+) -> reqwest::Result<Vec<AssetsItem>> {
+    http_client
+        .get(format!("{base_url}/v2/items"))
         .send()
         .await?
         .json()

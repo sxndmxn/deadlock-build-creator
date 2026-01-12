@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deadlock Build Creator</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Deadlock Build Creator</h1>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="hero-select">Hero</label>
+                    <select id="hero-select">
+                        <option value="">Select a hero...</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="loading-overlay" id="loading">
+                <div class="spinner"></div>
+                <p>Loading item data...</p>
+            </div>
+
+            <div class="stats-panel hidden" id="stats-panel">
+                <div class="stat-chip">
+                    <span class="stat-chip-label">Total Matches</span>
+                    <span class="stat-chip-value" id="total-matches">-</span>
+                </div>
+                <div class="stat-chip">
+                    <span class="stat-chip-label">Hero Win Rate</span>
+                    <span class="stat-chip-value" id="hero-winrate">-</span>
+                </div>
+                <div class="stat-chip">
+                    <span class="stat-chip-label">Items Tracked</span>
+                    <span class="stat-chip-value" id="items-tracked">-</span>
+                </div>
+            </div>
+
+            <div class="tiers-container" id="tiers-container">
+                <div class="tier-column" data-tier="1">
+                    <h2 class="tier-header">Tier 1 <span class="tier-cost">(500)</span></h2>
+                    <div class="items-list" id="tier-1-items"></div>
+                </div>
+                <div class="tier-column" data-tier="2">
+                    <h2 class="tier-header">Tier 2 <span class="tier-cost">(1,250)</span></h2>
+                    <div class="items-list" id="tier-2-items"></div>
+                </div>
+                <div class="tier-column" data-tier="3">
+                    <h2 class="tier-header">Tier 3 <span class="tier-cost">(3,000)</span></h2>
+                    <div class="items-list" id="tier-3-items"></div>
+                </div>
+                <div class="tier-column" data-tier="4">
+                    <h2 class="tier-header">Tier 4 <span class="tier-cost">(6,200+)</span></h2>
+                    <div class="items-list" id="tier-4-items"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="build-section">
+            <div class="build-header">
+                <h2>Your Build</h2>
+                <div class="build-actions">
+                    <button id="clear-build" class="btn btn-secondary">Clear</button>
+                    <button id="export-build" class="btn btn-primary">Export</button>
+                </div>
+            </div>
+            <div class="build-slots" id="build-slots">
+                <div class="build-slot empty" data-slot="0"></div>
+                <div class="build-slot empty" data-slot="1"></div>
+                <div class="build-slot empty" data-slot="2"></div>
+                <div class="build-slot empty" data-slot="3"></div>
+                <div class="build-slot empty" data-slot="4"></div>
+                <div class="build-slot empty" data-slot="5"></div>
+                <div class="build-slot empty" data-slot="6"></div>
+                <div class="build-slot empty" data-slot="7"></div>
+                <div class="build-slot empty" data-slot="8"></div>
+                <div class="build-slot empty" data-slot="9"></div>
+                <div class="build-slot empty" data-slot="10"></div>
+                <div class="build-slot empty" data-slot="11"></div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Item detail modal -->
+    <div class="modal" id="item-modal">
+        <div class="modal-content">
+            <button class="modal-close" id="modal-close">&times;</button>
+            <h3 id="modal-item-name">Item Name</h3>
+            <div class="modal-stats" id="modal-stats"></div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="js/api.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -82,6 +82,13 @@ impl APIError {
             message: "The requested user is protected.".to_owned(),
         }
     }
+
+    pub(super) fn bad_request(message: impl Into<String>) -> Self {
+        Self::StatusMsg {
+            status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
+    }
 }
 
 impl IntoResponse for APIError {

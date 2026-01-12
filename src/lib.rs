@@ -36,6 +36,7 @@ use tower_http::compression::{CompressionLayer, DefaultPredicate, Predicate};
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::normalize_path::{NormalizePath, NormalizePathLayer};
+use tower_http::services::ServeDir;
 use tower_layer::Layer;
 use tracing::debug;
 use utoipa::OpenApi;
@@ -80,6 +81,8 @@ pub async fn router(port: u16) -> Result<NormalizePath<Router>, StartupError> {
         .route("/", get(|| async { Redirect::to("/docs") }))
         // Serve favicon
         .route("/favicon.ico", get(favicon))
+        // Serve build creator frontend
+        .nest_service("/app", ServeDir::new("frontend"))
         // Add application routes
         .merge(routes::router())
         // Add prometheus metrics route
