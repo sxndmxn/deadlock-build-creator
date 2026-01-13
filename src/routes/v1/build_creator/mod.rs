@@ -1,5 +1,5 @@
 mod handlers;
-pub mod structs;
+pub(crate) mod structs;
 
 use core::time::Duration;
 

@@ -26,7 +26,7 @@ fn default_min_matches() -> Option<u32> {
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams, Eq, PartialEq, Hash)]
-pub struct BuildCreatorQuery {
+pub(crate) struct BuildCreatorQuery {
     /// Hero ID to get item stats for. See more: <https://assets.deadlock-api.com/v2/heroes>
     pub hero_id: u32,
     /// Minimum number of matches for statistical significance.
@@ -149,7 +149,7 @@ async fn run_query(
     ch_client.query(query_str).fetch_all().await
 }
 
-pub async fn build_creator_items(
+pub(crate) async fn build_creator_items(
     Query(mut query): Query<BuildCreatorQuery>,
     State(state): State<AppState>,
 ) -> APIResult<impl IntoResponse> {

@@ -8,6 +8,8 @@ pub mod hero_stats;
 pub mod hero_synergies_stats;
 mod item_permutation_stats;
 pub mod item_stats;
+pub mod item_timing_stats;
+pub mod item_upgrade_stats;
 mod kill_death_stats;
 pub mod player_performance_curve;
 pub mod player_scoreboard;
@@ -39,6 +41,8 @@ pub(super) fn router() -> OpenApiRouter<AppState> {
             .routes(routes!(kill_death_stats::kill_death_stats))
             .routes(routes!(hero_stats::hero_stats))
             .routes(routes!(item_stats::item_stats))
+            .routes(routes!(item_timing_stats::item_timing_stats))
+            .routes(routes!(item_upgrade_stats::item_upgrade_stats))
             .routes(routes!(item_permutation_stats::item_permutation_stats))
             .routes(routes!(hero_counters_stats::hero_counters_stats))
             .routes(routes!(hero_synergies_stats::hero_synergies_stats))
