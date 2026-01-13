@@ -22,6 +22,7 @@ pub(crate) struct AssetsItem {
     #[serde(default)]
     pub(crate) tier: Option<u32>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub(crate) cost: Option<u32>,
     #[serde(rename = "type", default)]
     pub(crate) item_type: Option<String>,

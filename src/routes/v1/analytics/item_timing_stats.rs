@@ -204,6 +204,7 @@ fn process_raw_results(raw_results: Vec<RawPhaseStats>) -> Vec<ItemTimingStats> 
         let mut optimal_win_rate = 0.0;
 
         for r in &rows {
+            #[allow(clippy::cast_precision_loss)]
             let win_rate = if r.matches > 0 {
                 (r.wins as f64) / (r.matches as f64)
             } else {
@@ -238,6 +239,7 @@ fn process_raw_results(raw_results: Vec<RawPhaseStats>) -> Vec<ItemTimingStats> 
             }
         }
 
+        #[allow(clippy::cast_precision_loss)]
         let overall_win_rate = if total_purchases > 0 {
             (total_wins as f64) / (total_purchases as f64)
         } else {
@@ -273,11 +275,8 @@ async fn run_query(
     ch_client: &clickhouse::Client,
     query_str: &str,
 ) -> clickhouse::error::Result<Vec<ItemTimingStats>> {
-    let raw_results: Vec<RawPhaseStats> = ch_client
-        .query(query_str)
-        .fetch_all()
-        .await?;
-    
+    let raw_results: Vec<RawPhaseStats> = ch_client.query(query_str).fetch_all().await?;
+
     Ok(process_raw_results(raw_results))
 }
 
@@ -344,7 +343,7 @@ mod test {
     fn test_build_query_default() {
         let query = ItemTimingQuery::default();
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("multiIf(it.game_time_s < 300, 0, it.game_time_s < 1200, 1, it.game_time_s < 1800, 2, 3) AS buy_phase"));
         assert!(query_str.contains("HAVING matches >= 20"));
     }
@@ -356,7 +355,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("hero_id = 42"));
     }
 
@@ -367,7 +366,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("it.item_id = 123"));
     }
 
@@ -378,7 +377,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("HAVING matches >= 50"));
     }
 
@@ -390,7 +389,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("start_time >= 1672531200"));
         assert!(query_str.contains("start_time <= 1675209599"));
     }
@@ -403,7 +402,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("average_badge_team0 >= 61 AND average_badge_team1 >= 61"));
         assert!(query_str.contains("average_badge_team0 <= 112 AND average_badge_team1 <= 112"));
     }

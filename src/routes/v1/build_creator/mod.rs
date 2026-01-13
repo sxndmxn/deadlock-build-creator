@@ -19,13 +19,11 @@ struct ApiDoc;
 
 pub(super) fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi()).merge(
-        OpenApiRouter::new()
-            .routes(routes!(items))
-            .layer(
-                CacheControlMiddleware::new(Duration::from_secs(60 * 60))
-                    .with_stale_while_revalidate(Duration::from_secs(12 * 60 * 60))
-                    .with_stale_if_error(Duration::from_secs(24 * 60 * 60)),
-            ),
+        OpenApiRouter::new().routes(routes!(items)).layer(
+            CacheControlMiddleware::new(Duration::from_secs(60 * 60))
+                .with_stale_while_revalidate(Duration::from_secs(12 * 60 * 60))
+                .with_stale_if_error(Duration::from_secs(24 * 60 * 60)),
+        ),
     )
 }
 

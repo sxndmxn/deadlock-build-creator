@@ -18,6 +18,7 @@ use crate::routes::v1::build_creator::structs::{
 };
 use crate::utils::parse::default_last_month_timestamp;
 
+#[allow(dead_code)]
 const NETWORTH_BUCKETS: [u32; 4] = [5000, 10000, 15000, 20000];
 
 #[allow(clippy::unnecessary_wraps)]
@@ -52,6 +53,7 @@ struct ItemStatsRow {
     item_id: u32,
     networth_bucket: u32,
     wins: u64,
+    #[allow(dead_code)]
     losses: u64,
     matches: u64,
     avg_buy_time_s: f64,
@@ -66,19 +68,19 @@ fn build_query(query: &BuildCreatorQuery) -> String {
     if let Some(max_unix_timestamp) = query.max_unix_timestamp {
         info_filters.push(format!("start_time <= {max_unix_timestamp}"));
     }
-    if let Some(min_badge_level) = query.min_average_badge {
-        if min_badge_level > 11 {
-            info_filters.push(format!(
-                "average_badge_team0 >= {min_badge_level} AND average_badge_team1 >= {min_badge_level}"
-            ));
-        }
+    if let Some(min_badge_level) = query.min_average_badge
+        && min_badge_level > 11
+    {
+        info_filters.push(format!(
+            "average_badge_team0 >= {min_badge_level} AND average_badge_team1 >= {min_badge_level}"
+        ));
     }
-    if let Some(max_badge_level) = query.max_average_badge {
-        if max_badge_level < 116 {
-            info_filters.push(format!(
-                "average_badge_team0 <= {max_badge_level} AND average_badge_team1 <= {max_badge_level}"
-            ));
-        }
+    if let Some(max_badge_level) = query.max_average_badge
+        && max_badge_level < 116
+    {
+        info_filters.push(format!(
+            "average_badge_team0 <= {max_badge_level} AND average_badge_team1 <= {max_badge_level}"
+        ));
     }
 
     let info_filters = if info_filters.is_empty() {
@@ -149,6 +151,7 @@ async fn run_query(
     ch_client.query(query_str).fetch_all().await
 }
 
+#[allow(clippy::similar_names)]
 pub(crate) async fn build_creator_items(
     Query(mut query): Query<BuildCreatorQuery>,
     State(state): State<AppState>,
@@ -211,6 +214,7 @@ pub(crate) async fn build_creator_items(
 
         for row in &stats_rows {
             let bucket_key = format!("{}", row.networth_bucket);
+            #[allow(clippy::cast_precision_loss)]
             let winrate = if row.matches > 0 {
                 row.wins as f64 / row.matches as f64
             } else {
@@ -226,10 +230,14 @@ pub(crate) async fn build_creator_items(
             );
 
             total_matches += row.matches;
-            total_buy_time += row.avg_buy_time_s * row.matches as f64;
+            #[allow(clippy::cast_precision_loss)]
+            {
+                total_buy_time += row.avg_buy_time_s * row.matches as f64;
+            }
             total_buy_time_count += row.matches;
         }
 
+        #[allow(clippy::cast_precision_loss)]
         let avg_buy_time_s = if total_buy_time_count > 0 {
             total_buy_time / total_buy_time_count as f64
         } else {
@@ -245,10 +253,7 @@ pub(crate) async fn build_creator_items(
             winrates_by_networth,
         };
 
-        tiers
-            .entry(tier.to_string())
-            .or_default()
-            .push(item);
+        tiers.entry(tier.to_string()).or_default().push(item);
     }
 
     // Sort items within each tier by average winrate descending
@@ -256,7 +261,9 @@ pub(crate) async fn build_creator_items(
         items.sort_by(|a, b| {
             let avg_wr_a = calculate_avg_winrate(&a.winrates_by_networth);
             let avg_wr_b = calculate_avg_winrate(&b.winrates_by_networth);
-            avg_wr_b.partial_cmp(&avg_wr_a).unwrap_or(std::cmp::Ordering::Equal)
+            avg_wr_b
+                .partial_cmp(&avg_wr_a)
+                .unwrap_or(core::cmp::Ordering::Equal)
         });
     }
 
@@ -277,10 +284,14 @@ fn calculate_avg_winrate(winrates: &HashMap<String, NetworthWinrate>) -> f64 {
         return 0.0;
     }
 
+    #[allow(clippy::cast_precision_loss)]
     let weighted_sum: f64 = winrates
         .values()
         .map(|w| w.winrate * w.matches as f64)
         .sum();
 
-    weighted_sum / total_matches as f64
+    #[allow(clippy::cast_precision_loss)]
+    {
+        weighted_sum / total_matches as f64
+    }
 }

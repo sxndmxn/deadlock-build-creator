@@ -72,6 +72,7 @@ struct RawUpgradeStats {
     total_held: u64,
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_query(query: &ItemUpgradeQuery) -> String {
     /* ---------- match_info filters ---------- */
     let mut info_filters = Vec::new();
@@ -202,13 +203,14 @@ fn process_raw_results(raw_results: Vec<RawUpgradeStats>) -> Vec<ItemUpgradeStat
     let mut results = Vec::new();
 
     for ((item_id, hero_id), rows) in grouped {
-        let total_purchases = rows.first().map(|r| r.total_purchases).unwrap_or(0);
-        
+        let total_purchases = rows.first().map_or(0, |r| r.total_purchases);
+
         let mut upgrades_to = Vec::new();
         let mut total_sold = 0u64;
         let mut total_held = 0u64;
 
         for r in rows {
+            #[allow(clippy::cast_precision_loss)]
             let upgrade_rate = if total_purchases > 0 {
                 (r.upgrade_count as f64) / (total_purchases as f64)
             } else {
@@ -226,12 +228,14 @@ fn process_raw_results(raw_results: Vec<RawUpgradeStats>) -> Vec<ItemUpgradeStat
             total_held += r.total_held;
         }
 
+        #[allow(clippy::cast_precision_loss)]
         let sell_rate = if total_purchases > 0 {
             (total_sold as f64) / (total_purchases as f64)
         } else {
             0.0
         };
 
+        #[allow(clippy::cast_precision_loss)]
         let hold_rate = if total_purchases > 0 {
             (total_held as f64) / (total_purchases as f64)
         } else {
@@ -263,11 +267,8 @@ async fn run_query(
     ch_client: &clickhouse::Client,
     query_str: &str,
 ) -> clickhouse::error::Result<Vec<ItemUpgradeStats>> {
-    let raw_results: Vec<RawUpgradeStats> = ch_client
-        .query(query_str)
-        .fetch_all()
-        .await?;
-    
+    let raw_results: Vec<RawUpgradeStats> = ch_client.query(query_str).fetch_all().await?;
+
     Ok(process_raw_results(raw_results))
 }
 
@@ -325,7 +326,7 @@ mod test {
     fn test_build_query_default() {
         let query = ItemUpgradeQuery::default();
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("HAVING total_purchases >= 20"));
         assert!(query_str.contains("potential_upgrades"));
     }
@@ -337,7 +338,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("hero_id = 42"));
     }
 
@@ -348,7 +349,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("source_item = 123"));
     }
 
@@ -359,7 +360,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("HAVING total_purchases >= 50"));
     }
 
@@ -371,7 +372,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("start_time >= 1672531200"));
         assert!(query_str.contains("start_time <= 1675209599"));
     }
@@ -384,7 +385,7 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        
+
         assert!(query_str.contains("average_badge_team0 >= 61 AND average_badge_team1 >= 61"));
         assert!(query_str.contains("average_badge_team0 <= 112 AND average_badge_team1 <= 112"));
     }

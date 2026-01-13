@@ -88,7 +88,9 @@ impl BucketQuery {
             Self::NetWorthBy3000 => "toUInt32(floor(net_worth_at_buy / 3000) * 3000)",
             Self::NetWorthBy5000 => "toUInt32(floor(net_worth_at_buy / 5000) * 5000)",
             Self::NetWorthBy10000 => "toUInt32(floor(net_worth_at_buy / 10000) * 10000)",
-            Self::GamePhase => "multiIf(buy_time < 300, 0, buy_time < 1200, 1, buy_time < 1800, 2, 3)",
+            Self::GamePhase => {
+                "multiIf(buy_time < 300, 0, buy_time < 1200, 1, buy_time < 1800, 2, 3)"
+            }
         }
     }
 }
@@ -635,7 +637,10 @@ mod test {
             ..Default::default()
         };
         let query_str = build_query(&query);
-        assert!(query_str.contains("multiIf(buy_time < 300, 0, buy_time < 1200, 1, buy_time < 1800, 2, 3)"));
+        assert!(
+            query_str
+                .contains("multiIf(buy_time < 300, 0, buy_time < 1200, 1, buy_time < 1800, 2, 3)")
+        );
         assert!(query_str.contains("it.game_time_s AS buy_time"));
     }
 }
