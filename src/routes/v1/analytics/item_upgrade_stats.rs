@@ -155,6 +155,7 @@ WITH
         SELECT
             source_item,
             hero_id,
+            source_buy_time,
             arrayFilter(
                 x -> x.game_time_s > source_buy_time AND x.game_time_s <= source_buy_time + 600,
                 sorted_items
@@ -168,7 +169,7 @@ WITH
             source_item,
             hero_id,
             arrayElement(potential_upgrades, 1).item_id AS target_item,
-            arrayElement(potential_upgrades, 1).game_time_s - arrayElement(potential_upgrades, 1).game_time_s AS upgrade_time_diff,
+            arrayElement(potential_upgrades, 1).game_time_s - source_buy_time AS upgrade_time_diff,
             was_sold,
             was_held
         FROM upgrade_pairs
