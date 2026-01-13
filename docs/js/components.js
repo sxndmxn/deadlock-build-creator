@@ -108,6 +108,11 @@ function createItemCard(item) {
     // Calculate average souls at purchase from bucket data
     const avgSouls = calculateAvgSouls(item.winrates_by_networth);
 
+    // Format sell timing if available
+    const sellTimeHtml = item.avg_sell_time_s > 0
+        ? `<span class="item-sell-time">Sell: ${formatTime(item.avg_sell_time_s)} (${Math.round(item.avg_sell_time_relative)}%)</span>`
+        : '';
+
     card.innerHTML = `
         <div class="item-header">
             ${imageHtml}
@@ -119,6 +124,7 @@ function createItemCard(item) {
         </div>
         <div class="item-footer">
             <span class="item-avg-souls">Avg souls: ${formatSouls(avgSouls)}</span>
+            ${sellTimeHtml}
             <span class="item-matches ${sampleClass}">${formatNumber(totalMatches)} total</span>
         </div>
     `;
@@ -326,6 +332,20 @@ function createModalStats(item) {
         </div>
     `;
 
+    // Add sell timing if available
+    if (item.avg_sell_time_s > 0) {
+        html += `
+            <div class="stat-row">
+                <span class="stat-label">Avg Sell Time</span>
+                <span class="stat-value">${formatTime(item.avg_sell_time_s)}</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Sell Point</span>
+                <span class="stat-value">${Math.round(item.avg_sell_time_relative)}% of match</span>
+            </div>
+        `;
+    }
+
     return html;
 }
 
@@ -369,11 +389,33 @@ function getBestBucketMatches(item) {
 }
 
 /**
+ * Get sort function based on sortBy parameter
+ * @param {string} sortBy - 'winrate', 'popularity', or 'buy_order'
+ * @returns {function} Comparator function
+ */
+function getSortFunction(sortBy) {
+    switch (sortBy) {
+        case 'popularity':
+            return (a, b) => b.matches_total - a.matches_total;
+        case 'buy_order':
+            return (a, b) => a.avg_buy_time_s - b.avg_buy_time_s;
+        case 'winrate':
+        default:
+            return (a, b) => {
+                const wrA = calculateOverallWinrate(a.winrates_by_networth);
+                const wrB = calculateOverallWinrate(b.winrates_by_networth);
+                return wrB - wrA;
+            };
+    }
+}
+
+/**
  * Render items into a tier column, grouped by sample size quality
  * @param {string} tierId - The tier number (1-4)
  * @param {Array} items - Array of items for this tier
+ * @param {string} sortBy - Sort method: 'winrate', 'popularity', or 'buy_order'
  */
-function renderTierItems(tierId, items) {
+function renderTierItems(tierId, items, sortBy = 'winrate') {
     const container = document.getElementById(`tier-${tierId}-items`);
     if (!container) return;
 
@@ -394,16 +436,11 @@ function renderTierItems(tierId, items) {
         }
     });
 
-    // Sort each group by winrate descending
-    const sortByWinrate = (a, b) => {
-        const wrA = calculateOverallWinrate(a.winrates_by_networth);
-        const wrB = calculateOverallWinrate(b.winrates_by_networth);
-        return wrB - wrA;
-    };
-
-    greenItems.sort(sortByWinrate);
-    yellowItems.sort(sortByWinrate);
-    redItems.sort(sortByWinrate);
+    // Sort each group based on sortBy parameter
+    const sortFn = getSortFunction(sortBy);
+    greenItems.sort(sortFn);
+    yellowItems.sort(sortFn);
+    redItems.sort(sortFn);
 
     container.innerHTML = '';
 
@@ -557,6 +594,68 @@ function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Game Time Phase Functions
+
+/**
+ * Group minute-level data into game phases
+ * @param {Object} winratesByGameTime - Object with minute keys (0-30+)
+ * @returns {Object} - Stats grouped by phase with winrate calculated
+ */
+function groupByGamePhase(winratesByGameTime) {
+    const phases = {
+        '0-5': { wins: 0, matches: 0, winrate: 0 },      // minutes 0-4
+        '5-10': { wins: 0, matches: 0, winrate: 0 },     // minutes 5-9
+        '10-20': { wins: 0, matches: 0, winrate: 0 },    // minutes 10-19
+        '20-30': { wins: 0, matches: 0, winrate: 0 },    // minutes 20-29
+        '30+': { wins: 0, matches: 0, winrate: 0 },      // minutes 30+
+    };
+
+    Object.entries(winratesByGameTime).forEach(([minuteStr, data]) => {
+        const minute = parseInt(minuteStr, 10);
+        if (isNaN(minute)) return;
+
+        let phaseKey;
+        if (minute < 5) phaseKey = '0-5';
+        else if (minute < 10) phaseKey = '5-10';
+        else if (minute < 20) phaseKey = '10-20';
+        else if (minute < 30) phaseKey = '20-30';
+        else phaseKey = '30+';
+
+        phases[phaseKey].wins += data.wins || 0;
+        phases[phaseKey].matches += data.matches || 0;
+    });
+
+    // Calculate winrates
+    Object.keys(phases).forEach(key => {
+        const p = phases[key];
+        p.winrate = p.matches > 0 ? p.wins / p.matches : 0;
+    });
+
+    return phases;
+}
+
+/**
+ * Find the best game phase for an item (highest winrate with sufficient data)
+ * @param {Object} phases - Result of groupByGamePhase()
+ * @param {number} totalMatches - Total matches across all phases
+ * @returns {{phase: string, winrate: number, matches: number}|null}
+ */
+function findBestGamePhase(phases, totalMatches) {
+    const minPercentage = 0.05;
+    const percentageMin = totalMatches * minPercentage;
+    const absoluteMin = 500;
+
+    let best = null;
+    for (const [phase, data] of Object.entries(phases)) {
+        if (data.matches >= percentageMin || data.matches >= absoluteMin) {
+            if (!best || data.winrate > best.winrate) {
+                best = { phase, winrate: data.winrate, matches: data.matches };
+            }
+        }
+    }
+    return best;
 }
 
 // Timeline functions
@@ -733,59 +832,119 @@ function getRecommendedBuild(allItems) {
 }
 
 /**
- * Check if an item's purchase window overlaps with a phase range
- */
-function windowOverlapsPhase(window, phaseStart, phaseEnd) {
-    if (!window) return false;
-    return window.start <= phaseEnd && window.end >= phaseStart;
-}
-
-/**
- * Render items into a phase column
- * Shows items whose optimal purchase window overlaps with this phase
- * Phase view always shows compact icons for quick mid-game reference
- * @param {string} phaseKey - e.g., "0-5000", "5000-10000"
+ * Render items into a game time phase column
+ * Shows items with data in this game phase
+ * @param {string} phaseKey - e.g., "0-5", "5-10", "10-20", "20-30", "30+"
  * @param {Array} allItems - All items across all tiers
+ * @param {string} sortBy - Sort method: 'winrate', 'popularity', or 'buy_order'
  */
-function renderPhaseItems(phaseKey, allItems) {
-    const container = document.getElementById(`phase-${phaseKey}-items`);
-    if (!container) return;
+function renderGameTimePhaseItems(phaseKey, allItems, sortBy = 'winrate') {
+    // Handle the special case of 30+ which has different ID format
+    const containerId = phaseKey === '30+' ? 'phase-30-plus-items' : `phase-${phaseKey}-items`;
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.warn(`Container not found: ${containerId}`);
+        return;
+    }
 
-    // Parse phase range
-    const [phaseStart, phaseEnd] = phaseKey.split('-').map(Number);
-
-    // Find items whose purchase window overlaps this phase
+    // Filter and calculate phase stats for each item
     const itemsInPhase = allItems
         .map(item => {
-            const window = findPurchaseWindow(item);
-            return { item, window };
-        })
-        .filter(({ window }) => windowOverlapsPhase(window, phaseStart, phaseEnd))
-        .filter(({ item }) => getBestBucketMatches(item) >= 1000);
+            // Skip items without game time data
+            if (!item.winrates_by_game_time || Object.keys(item.winrates_by_game_time).length === 0) {
+                return null;
+            }
 
-    // Sort by peak winrate in this phase (descending)
-    itemsInPhase.sort((a, b) => {
-        const wrA = a.window ? a.window.peakWinrate : 0;
-        const wrB = b.window ? b.window.peakWinrate : 0;
-        return wrB - wrA;
-    });
+            // Aggregate into phases
+            const phases = groupByGamePhase(item.winrates_by_game_time);
+            const phaseData = phases[phaseKey];
+
+            // Skip if no data in this phase
+            if (!phaseData || phaseData.matches < 100) {
+                return null;
+            }
+
+            return { item, phaseData };
+        })
+        .filter(x => x !== null);
+
+    // Sort based on sortBy parameter
+    switch (sortBy) {
+        case 'popularity':
+            itemsInPhase.sort((a, b) => b.phaseData.matches - a.phaseData.matches);
+            break;
+        case 'buy_order':
+            itemsInPhase.sort((a, b) => a.item.avg_buy_time_s - b.item.avg_buy_time_s);
+            break;
+        case 'winrate':
+        default:
+            itemsInPhase.sort((a, b) => b.phaseData.winrate - a.phaseData.winrate);
+            break;
+    }
 
     // Always use condensed icon layout for phase view
     container.classList.add('condensed');
 
     container.innerHTML = '';
-    itemsInPhase.forEach(({ item }) => {
-        container.appendChild(createIconCard(item));
+    if (itemsInPhase.length === 0) {
+        container.innerHTML = '<div class="phase-empty">No data</div>';
+        return;
+    }
+
+    itemsInPhase.forEach(({ item, phaseData }) => {
+        const card = createGameTimeIconCard(item, phaseData);
+        container.appendChild(card);
     });
 }
 
 /**
- * Render all phase columns (always uses icon view)
- * @param {Array} allItems - All items across all tiers
+ * Create a compact icon card for game time phase view with winrate tooltip
+ * @param {Object} item - The item data
+ * @param {Object} phaseData - { winrate, matches, wins } for this phase
+ * @returns {HTMLElement}
  */
-function renderAllPhases(allItems) {
-    const phases = ['0-5000', '5000-10000', '10000-15000', '15000-20000', '20000-50000'];
-    phases.forEach(phase => renderPhaseItems(phase, allItems));
+function createGameTimeIconCard(item, phaseData) {
+    const card = document.createElement('div');
+    card.className = 'icon-card';
+    card.dataset.itemId = item.item_id;
+
+    // Add winrate-based color class (6-tier, all visible)
+    // Wide thresholds to show color variety in real data
+    const wr = phaseData.winrate;
+    if (wr >= 0.56) {
+        card.classList.add('wr-excellent');  // bright green + glow (56%+)
+    } else if (wr >= 0.52) {
+        card.classList.add('wr-good');       // green (52-56%)
+    } else if (wr >= 0.48) {
+        card.classList.add('wr-average');    // yellow-green (48-52%)
+    } else if (wr >= 0.44) {
+        card.classList.add('wr-below');      // yellow (44-48%)
+    } else if (wr >= 0.40) {
+        card.classList.add('wr-poor');       // orange (40-44%)
+    } else {
+        card.classList.add('wr-bad');        // red + glow (<40%)
+    }
+
+    const tooltipText = `${item.name} - ${formatPercent(phaseData.winrate)} (${formatNumber(phaseData.matches)} matches)`;
+
+    if (item.image) {
+        card.innerHTML = `<img src="${item.image}" alt="${escapeHtml(item.name)}" title="${escapeHtml(tooltipText)}">`;
+    } else {
+        card.textContent = item.name.substring(0, 2);
+        card.title = tooltipText;
+    }
+
+    return card;
+}
+
+/**
+ * Render all game time phase columns
+ * @param {Array} allItems - All items across all tiers
+ * @param {string} sortBy - Sort method: 'winrate', 'popularity', or 'buy_order'
+ */
+function renderAllPhases(allItems, sortBy = 'winrate') {
+    const phases = ['0-5', '5-10', '10-20', '20-30', '30+'];
+    phases.forEach(phase => renderGameTimePhaseItems(phase, allItems, sortBy));
 }
 
 // Export for use in app.js
@@ -799,6 +958,7 @@ const Components = {
     renderTimeline,
     renderAllPhases,
     getRecommendedBuild,
+    groupByGamePhase,
     formatPercent,
     formatNumber,
     formatNetworth,

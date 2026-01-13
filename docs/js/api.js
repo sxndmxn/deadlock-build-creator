@@ -66,17 +66,47 @@ async function fetchItemStats(heroId, networthBucket) {
 }
 
 /**
+ * Fetch item stats bucketed by game time (per minute)
+ * @param {number} heroId
+ * @returns {Promise<Array>}
+ */
+async function fetchItemStatsByGameTime(heroId) {
+    const params = new URLSearchParams({
+        hero_ids: heroId,
+        bucket: 'game_time_min',
+        min_matches: 30,
+    });
+
+    const url = `${API_BASE}/analytics/item-stats?${params}`;
+    console.log('Fetching game time stats:', url);
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('API error:', response.status, text);
+            throw new Error(`Failed to fetch game time stats: ${response.status}`);
+        }
+        return response.json();
+    } catch (err) {
+        console.error('Fetch error:', err);
+        throw err;
+    }
+}
+
+/**
  * Fetch build creator items for a specific hero
  * Aggregates data from multiple API calls
  * @param {number} heroId - The hero ID
  * @returns {Promise<Object>} Build creator response with tiers
  */
 async function fetchBuildCreatorItems(heroId) {
-    // Fetch items metadata and stats in parallel
-    // Use 1000 bucket size for most granular data
-    const [itemsMetadata, stats] = await Promise.all([
+    // Fetch items metadata, networth stats, and game time stats in parallel
+    // Use 1000 bucket size for most granular networth data
+    const [itemsMetadata, stats, gameTimeStats] = await Promise.all([
         fetchItemsMetadata(),
         fetchItemStats(heroId, 1000),
+        fetchItemStatsByGameTime(heroId),
     ]);
 
     // Create item lookup map (only upgrades with tiers)
@@ -104,25 +134,32 @@ async function fetchBuildCreatorItems(heroId) {
     // Aggregate stats by item
     const aggregatedStats = new Map();
 
-    function processStats(stats) {
+    function ensureItem(stat) {
+        const itemMeta = itemsMap.get(stat.item_id);
+        if (!itemMeta) return null;
+
+        if (!aggregatedStats.has(stat.item_id)) {
+            aggregatedStats.set(stat.item_id, {
+                item_id: stat.item_id,
+                name: itemMeta.name,
+                tier: itemMeta.tier,
+                slot: itemMeta.slot,
+                image: itemMeta.image,
+                matches_total: 0,
+                avg_buy_time_s: 0,
+                avg_sell_time_s: 0,
+                avg_sell_time_relative: 0,
+                winrates_by_networth: {},
+                winrates_by_game_time: {},
+            });
+        }
+        return aggregatedStats.get(stat.item_id);
+    }
+
+    function processNetworthStats(stats) {
         stats.forEach(stat => {
-            const itemMeta = itemsMap.get(stat.item_id);
-            if (!itemMeta) return;
-
-            if (!aggregatedStats.has(stat.item_id)) {
-                aggregatedStats.set(stat.item_id, {
-                    item_id: stat.item_id,
-                    name: itemMeta.name,
-                    tier: itemMeta.tier,
-                    slot: itemMeta.slot,
-                    image: itemMeta.image,
-                    matches_total: 0,
-                    avg_buy_time_s: 0,
-                    winrates_by_networth: {},
-                });
-            }
-
-            const agg = aggregatedStats.get(stat.item_id);
+            const agg = ensureItem(stat);
+            if (!agg) return;
 
             // Only add if this bucket has data
             if (stat.matches > 0) {
@@ -137,13 +174,42 @@ async function fetchBuildCreatorItems(heroId) {
 
                 agg.matches_total += stat.matches;
                 agg.avg_buy_time_s = stat.avg_buy_time_s;
+
+                // Capture sell timing data (use latest value as approximation)
+                if (stat.avg_sell_time_s) {
+                    agg.avg_sell_time_s = stat.avg_sell_time_s;
+                }
+                if (stat.avg_sell_time_relative) {
+                    agg.avg_sell_time_relative = stat.avg_sell_time_relative;
+                }
             }
         });
     }
 
-    // Process stats - bucket value comes from API response
-    console.log('Stats count:', stats.length);
-    processStats(stats);
+    function processGameTimeStats(stats) {
+        stats.forEach(stat => {
+            const agg = ensureItem(stat);
+            if (!agg) return;
+
+            // Only add if this bucket has data
+            if (stat.matches > 0) {
+                const bucketKey = String(stat.bucket); // minute value
+                const winrate = stat.wins / stat.matches;
+
+                agg.winrates_by_game_time[bucketKey] = {
+                    winrate,
+                    matches: stat.matches,
+                    wins: stat.wins,
+                };
+            }
+        });
+    }
+
+    // Process both networth and game time stats
+    console.log('Networth stats count:', stats.length);
+    console.log('Game time stats count:', gameTimeStats.length);
+    processNetworthStats(stats);
+    processGameTimeStats(gameTimeStats);
 
     // Group by tier
     const tiers = { '1': [], '2': [], '3': [], '4': [] };
@@ -179,5 +245,6 @@ const API = {
     fetchHeroes,
     fetchItemsMetadata,
     fetchItemStats,
+    fetchItemStatsByGameTime,
     fetchBuildCreatorItems,
 };

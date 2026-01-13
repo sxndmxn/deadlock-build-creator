@@ -1,5 +1,5 @@
 mod handlers;
-pub mod structs;
+pub(super) mod structs;
 
 use core::time::Duration;
 

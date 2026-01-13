@@ -45,6 +45,10 @@ pub enum BucketQuery {
     GameTimeMin,
     /// Bucket Item Stats by Game Time Normalized with the match duration
     GameTimeNormalizedPercentage,
+    /// Bucket Item Stats by Game Phase (0-5, 5-10, 10-20, 20-30, 30+ minutes)
+    #[serde(rename = "game_phase")]
+    #[strum(to_string = "game_phase")]
+    GamePhase,
     /// Bucket Item Stats by Net Worth (grouped by 1000)
     #[serde(rename = "net_worth_by_1000")]
     #[strum(to_string = "net_worth_by_1000")]
@@ -80,6 +84,10 @@ impl BucketQuery {
             Self::GameTimeMin => "toUInt32(floor(buy_time / 60))",
             Self::GameTimeNormalizedPercentage => {
                 "toUInt32(floor((buy_time - 1) / duration_s * 100))"
+            }
+            // Game phases: 0=0-5min, 1=5-10min, 2=10-20min, 3=20-30min, 4=30+min
+            Self::GamePhase => {
+                "toUInt32(CASE WHEN buy_time < 300 THEN 0 WHEN buy_time < 600 THEN 1 WHEN buy_time < 1200 THEN 2 WHEN buy_time < 1800 THEN 3 ELSE 4 END)"
             }
             Self::NetWorthBy1000 => "toUInt32(floor(net_worth_at_buy / 1000) * 1000)",
             Self::NetWorthBy2000 => "toUInt32(floor(net_worth_at_buy / 2000) * 2000)",
@@ -277,6 +285,7 @@ fn build_query(query: &ItemStatsQuery) -> String {
 
     let buy_time_expr = if query.bucket == BucketQuery::GameTimeMin
         || query.bucket == BucketQuery::GameTimeNormalizedPercentage
+        || query.bucket == BucketQuery::GamePhase
     {
         ",it.game_time_s AS buy_time"
     } else {

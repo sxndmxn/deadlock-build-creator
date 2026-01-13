@@ -9,6 +9,7 @@ const state = {
     build: Array(12).fill(null),  // 12 slots
     isLoading: false,
     viewMode: 'tier',  // 'tier' or 'phase'
+    sortBy: 'winrate',  // 'winrate', 'popularity', or 'buy_order'
 };
 
 // DOM Elements
@@ -36,6 +37,7 @@ const elements = {
     autoFillBuild: document.getElementById('auto-fill-build'),
     viewButtons: document.querySelectorAll('.view-btn'),
     phasesContainer: document.getElementById('phases-container'),
+    sortButtons: document.querySelectorAll('.sort-btn'),
 };
 
 // Initialize application
@@ -186,6 +188,14 @@ function setupEventListeners() {
         });
     });
 
+    // Sort toggle (Win Rate / Popularity / Buy Order)
+    elements.sortButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const sortBy = btn.dataset.sort;
+            setSortBy(sortBy);
+        });
+    });
+
     // Phase container item clicks (delegated) - handles both full cards and icon cards
     elements.phasesContainer.addEventListener('click', (e) => {
         const card = e.target.closest('.item-card');
@@ -240,7 +250,7 @@ function renderAllTiers() {
 
     ['1', '2', '3', '4'].forEach(tier => {
         const items = state.itemData.tiers[tier] || [];
-        Components.renderTierItems(tier, items);
+        Components.renderTierItems(tier, items, state.sortBy);
 
         // Aggregate stats
         items.forEach(item => {
@@ -270,7 +280,7 @@ function renderAllTiers() {
     Components.renderTimeline(allItems);
 
     // Render phase columns (always shows icons)
-    Components.renderAllPhases(allItems);
+    Components.renderAllPhases(allItems, state.sortBy);
 
     // Apply current view mode
     applyViewMode();
@@ -285,6 +295,18 @@ function setViewMode(mode) {
     });
 
     applyViewMode();
+}
+
+function setSortBy(sortBy) {
+    state.sortBy = sortBy;
+
+    // Update button states
+    elements.sortButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sort === sortBy);
+    });
+
+    // Re-render tiers with new sort
+    renderAllTiers();
 }
 
 function applyViewMode() {
@@ -437,12 +459,16 @@ function clearItems() {
         const container = document.getElementById(`tier-${tier}-items`);
         if (container) container.innerHTML = '';
     });
-    // Clear phase columns
-    const phases = ['0-5000', '5000-10000', '10000-15000', '15000-20000', '20000-50000'];
+    // Clear game time phase columns
+    const phases = ['0-5', '5-10', '10-20', '20-30'];
     phases.forEach(phase => {
         const container = document.getElementById(`phase-${phase}-items`);
         if (container) container.innerHTML = '';
     });
+    // Clear 30+ phase (special ID)
+    const phase30Plus = document.getElementById('phase-30-plus-items');
+    if (phase30Plus) phase30Plus.innerHTML = '';
+
     elements.statsPanel.classList.add('hidden');
     elements.timelineSection.classList.add('hidden');
     elements.phasesContainer.classList.add('hidden');

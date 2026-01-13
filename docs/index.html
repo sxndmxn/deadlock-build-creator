@@ -42,6 +42,12 @@
                     <button class="view-btn active" data-view="tier">By Tier</button>
                     <button class="view-btn" data-view="phase">By Phase</button>
                 </div>
+                <div class="sort-toggle">
+                    <span class="sort-label">Sort:</span>
+                    <button class="sort-btn active" data-sort="winrate">Win Rate</button>
+                    <button class="sort-btn" data-sort="popularity">Popularity</button>
+                    <button class="sort-btn" data-sort="buy_order">Buy Order</button>
+                </div>
             </div>
 
             <div class="tiers-container" id="tiers-container">
@@ -64,25 +70,25 @@
             </div>
 
             <div class="phases-container hidden" id="phases-container">
-                <div class="phase-column" data-phase="0-5000">
-                    <h2 class="phase-header">0-5k</h2>
-                    <div class="items-list" id="phase-0-5000-items"></div>
+                <div class="phase-column" data-phase="0-5">
+                    <h2 class="phase-header">0-5 min</h2>
+                    <div class="items-list" id="phase-0-5-items"></div>
                 </div>
-                <div class="phase-column" data-phase="5000-10000">
-                    <h2 class="phase-header">5-10k</h2>
-                    <div class="items-list" id="phase-5000-10000-items"></div>
+                <div class="phase-column" data-phase="5-10">
+                    <h2 class="phase-header">5-10 min</h2>
+                    <div class="items-list" id="phase-5-10-items"></div>
                 </div>
-                <div class="phase-column" data-phase="10000-15000">
-                    <h2 class="phase-header">10-15k</h2>
-                    <div class="items-list" id="phase-10000-15000-items"></div>
+                <div class="phase-column" data-phase="10-20">
+                    <h2 class="phase-header">10-20 min</h2>
+                    <div class="items-list" id="phase-10-20-items"></div>
                 </div>
-                <div class="phase-column" data-phase="15000-20000">
-                    <h2 class="phase-header">15-20k</h2>
-                    <div class="items-list" id="phase-15000-20000-items"></div>
+                <div class="phase-column" data-phase="20-30">
+                    <h2 class="phase-header">20-30 min</h2>
+                    <div class="items-list" id="phase-20-30-items"></div>
                 </div>
-                <div class="phase-column" data-phase="20000-50000">
-                    <h2 class="phase-header">20k+</h2>
-                    <div class="items-list" id="phase-20000-50000-items"></div>
+                <div class="phase-column" data-phase="30+">
+                    <h2 class="phase-header">30+ min</h2>
+                    <div class="items-list" id="phase-30-plus-items"></div>
                 </div>
             </div>
 
