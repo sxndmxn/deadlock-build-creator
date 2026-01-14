@@ -66,9 +66,11 @@ function getSampleSizeClass(matches) {
 /**
  * Create an item card element showing all networth brackets
  * @param {Object} item - The item data
+ * @param {Map|null} synergyMap - Optional synergy map for showing paired items
+ * @param {Map|null} itemImagesMap - Optional item images map for synergy icons
  * @returns {HTMLElement}
  */
-function createItemCard(item) {
+function createItemCard(item, synergyMap = null, itemImagesMap = null) {
     const card = document.createElement('div');
     card.className = 'item-card';
     card.dataset.itemId = item.item_id;
@@ -113,12 +115,18 @@ function createItemCard(item) {
         ? `<span class="item-sell-time">Sell: ${formatTime(item.avg_sell_time_s)} (${Math.round(item.avg_sell_time_relative)}%)</span>`
         : '';
 
+    // Create synergy badges if synergy data is available
+    const synergyHtml = (synergyMap && itemImagesMap)
+        ? createSynergyBadges(item.item_id, synergyMap, itemImagesMap)
+        : '';
+
     card.innerHTML = `
         <div class="item-header">
             ${imageHtml}
             <span class="item-name">${escapeHtml(item.name)}</span>
             <span class="item-winrate ${overallClass}">${formatPercent(overallWinrate)}</span>
         </div>
+        ${synergyHtml}
         <div class="item-buckets">
             ${bucketRows}
         </div>
@@ -414,8 +422,10 @@ function getSortFunction(sortBy) {
  * @param {string} tierId - The tier number (1-4)
  * @param {Array} items - Array of items for this tier
  * @param {string} sortBy - Sort method: 'winrate', 'popularity', or 'buy_order'
+ * @param {Map|null} synergyMap - Optional synergy map for showing paired items
+ * @param {Map|null} itemImagesMap - Optional item images map for synergy icons
  */
-function renderTierItems(tierId, items, sortBy = 'winrate') {
+function renderTierItems(tierId, items, sortBy = 'winrate', synergyMap = null, itemImagesMap = null) {
     const container = document.getElementById(`tier-${tierId}-items`);
     if (!container) return;
 
@@ -447,7 +457,7 @@ function renderTierItems(tierId, items, sortBy = 'winrate') {
     // Render green items
     if (greenItems.length > 0) {
         greenItems.forEach(item => {
-            container.appendChild(createItemCard(item));
+            container.appendChild(createItemCard(item, synergyMap, itemImagesMap));
         });
     }
 
@@ -457,7 +467,7 @@ function renderTierItems(tierId, items, sortBy = 'winrate') {
             container.appendChild(createSeparator('Limited Data'));
         }
         yellowItems.forEach(item => {
-            container.appendChild(createItemCard(item));
+            container.appendChild(createItemCard(item, synergyMap, itemImagesMap));
         });
     }
 
@@ -467,7 +477,7 @@ function renderTierItems(tierId, items, sortBy = 'winrate') {
             container.appendChild(createSeparator('Low Sample Size'));
         }
         redItems.forEach(item => {
-            container.appendChild(createItemCard(item));
+            container.appendChild(createItemCard(item, synergyMap, itemImagesMap));
         });
     }
 }
@@ -947,6 +957,591 @@ function renderAllPhases(allItems, sortBy = 'winrate') {
     phases.forEach(phase => renderGameTimePhaseItems(phase, allItems, sortBy));
 }
 
+// ============ Build Path Components ============
+
+/**
+ * Create an upgrade chain card showing the progression T1 → T2 → T3 → T4
+ * @param {Object} chain - Chain data from the API
+ * @param {Map} itemImages - Map of item_id -> image URL
+ * @returns {HTMLElement}
+ */
+function createUpgradeChainCard(chain, itemImages) {
+    const card = document.createElement('div');
+    card.className = 'upgrade-chain-card';
+    card.dataset.slot = chain.slot;
+
+    // Determine winrate class
+    let winrateClass = 'neutral';
+    if (chain.win_rate > 0.52) winrateClass = 'positive';
+    else if (chain.win_rate < 0.48) winrateClass = 'negative';
+
+    // Create item icons for the chain
+    const itemsHtml = chain.items.map((item, index) => {
+        const imageUrl = item.image || itemImages.get(item.item_id) || '';
+        const arrow = index < chain.items.length - 1 ? '<span class="chain-arrow">→</span>' : '';
+        return `
+            <div class="chain-item" data-item-id="${item.item_id}" title="${escapeHtml(item.name)} (T${item.tier} - ${item.cost} souls)">
+                ${imageUrl ? `<img src="${imageUrl}" alt="${escapeHtml(item.name)}">` : `<span class="chain-item-text">${escapeHtml(item.name.substring(0, 3))}</span>`}
+            </div>
+            ${arrow}
+        `;
+    }).join('');
+
+    // Slot badge color
+    const slotColors = {
+        'weapon': 'slot-weapon',
+        'vitality': 'slot-vitality',
+        'spirit': 'slot-spirit',
+    };
+    const slotClass = slotColors[chain.slot] || '';
+
+    card.innerHTML = `
+        <div class="chain-header">
+            <span class="chain-slot ${slotClass}">${chain.slot}</span>
+            <span class="chain-winrate ${winrateClass}">${formatPercent(chain.win_rate)}</span>
+        </div>
+        <div class="chain-items">
+            ${itemsHtml}
+        </div>
+        <div class="chain-footer">
+            <span class="chain-cost">${formatNumber(chain.total_cost)} souls</span>
+            <span class="chain-matches">${formatNumber(chain.matches)} matches</span>
+        </div>
+    `;
+
+    return card;
+}
+
+/**
+ * Create a standalone item card for items without upgrade paths
+ * @param {Object} item - Standalone item data from the API
+ * @param {Map} itemImages - Map of item_id -> image URL
+ * @returns {HTMLElement}
+ */
+function createStandaloneItemCard(item, itemImages) {
+    const card = document.createElement('div');
+    card.className = 'standalone-item-card';
+    card.dataset.itemId = item.item_id;
+
+    // Determine winrate class
+    let winrateClass = 'neutral';
+    if (item.win_rate > 0.52) winrateClass = 'positive';
+    else if (item.win_rate < 0.48) winrateClass = 'negative';
+
+    const imageUrl = item.image || itemImages.get(item.item_id) || '';
+
+    // Slot badge color
+    const slotColors = {
+        'weapon': 'slot-weapon',
+        'vitality': 'slot-vitality',
+        'spirit': 'slot-spirit',
+    };
+    const slotClass = slotColors[item.slot] || '';
+
+    card.innerHTML = `
+        <div class="standalone-item-image">
+            ${imageUrl ? `<img src="${imageUrl}" alt="${escapeHtml(item.name)}">` : `<span>${escapeHtml(item.name.substring(0, 3))}</span>`}
+        </div>
+        <div class="standalone-item-info">
+            <span class="standalone-item-name">${escapeHtml(item.name)}</span>
+            <span class="standalone-item-slot ${slotClass}">${item.slot}</span>
+        </div>
+        <div class="standalone-item-stats">
+            <span class="standalone-item-winrate ${winrateClass}">${formatPercent(item.win_rate)}</span>
+            <span class="standalone-item-matches">${formatNumber(item.matches)}</span>
+        </div>
+    `;
+
+    return card;
+}
+
+/**
+ * Create a phase item card for the build path view
+ * Shows tier badge, win rate, and match count
+ * @param {Object} item - Item data with phase_win_rate
+ * @returns {HTMLElement}
+ */
+function createPhaseItemCard(item) {
+    const card = document.createElement('div');
+    card.className = 'phase-item-card';
+    card.dataset.itemId = item.item_id;
+
+    const winRate = item.powerspike_win_rate || item.phase_win_rate || item.overall_win_rate || 0;
+    let winrateClass = 'neutral';
+    if (winRate > 0.52) winrateClass = 'positive';
+    else if (winRate < 0.48) winrateClass = 'negative';
+
+    const imageUrl = item.image || '';
+
+    // Slot color class
+    const slotColors = { weapon: 'slot-weapon', vitality: 'slot-vitality', spirit: 'slot-spirit' };
+    const slotClass = slotColors[item.slot] || '';
+
+    const matches = item.powerspike_matches || item.phase_matches || item.overall_matches || 0;
+
+    card.innerHTML = `
+        <div class="phase-item-image">
+            ${imageUrl ? `<img src="${imageUrl}" alt="${escapeHtml(item.name)}">` : `<span>${escapeHtml(item.name.substring(0, 3))}</span>`}
+        </div>
+        <div class="phase-item-info">
+            <span class="phase-item-name">${escapeHtml(item.name)}</span>
+            <span class="phase-item-meta">
+                <span class="phase-item-tier tier-${item.tier}">T${item.tier}</span>
+                <span class="phase-item-slot ${slotClass}">${item.slot}</span>
+            </span>
+        </div>
+        <div class="phase-item-stats">
+            <span class="phase-item-winrate ${winrateClass}">${formatPercent(winRate)}</span>
+            <span class="phase-item-matches">${formatNumber(matches)} matches</span>
+        </div>
+    `;
+
+    return card;
+}
+
+/**
+ * Create a Best 12 item card with powerspike info
+ * @param {Object} item - Item data
+ * @param {number} index - Position in the build order
+ * @returns {HTMLElement}
+ */
+function createBest12ItemCard(item, index) {
+    const card = document.createElement('div');
+    card.className = 'best-12-item';
+    card.dataset.itemId = item.item_id;
+
+    let winrateClass = 'neutral';
+    if (item.win_rate > 0.52) winrateClass = 'positive';
+    else if (item.win_rate < 0.48) winrateClass = 'negative';
+
+    const imageUrl = item.image || '';
+
+    // Slot color class
+    const slotColors = { weapon: 'slot-weapon', vitality: 'slot-vitality', spirit: 'slot-spirit' };
+    const slotClass = slotColors[item.slot] || '';
+
+    // Powerspike badge
+    let powerspikeHtml = '';
+    if (item.powerspike) {
+        const psClass = item.powerspike.win_rate > 0.52 ? 'positive' : 'neutral';
+        powerspikeHtml = `<span class="powerspike-badge ${psClass}">${item.powerspike.phase}m: ${formatPercent(item.powerspike.win_rate)}</span>`;
+    }
+
+    card.innerHTML = `
+        <span class="best-12-order">${index + 1}</span>
+        <div class="best-12-item-image">
+            ${imageUrl ? `<img src="${imageUrl}" alt="${escapeHtml(item.name)}">` : `<span>${escapeHtml(item.name.substring(0, 3))}</span>`}
+        </div>
+        <div class="best-12-item-info">
+            <span class="best-12-item-name">${escapeHtml(item.name)}</span>
+            <span class="best-12-item-meta">
+                <span class="best-12-item-tier tier-${item.tier}">T${item.tier}</span>
+                <span class="best-12-item-slot ${slotClass}">${item.slot}</span>
+                <span class="best-12-item-cost">${item.cost}</span>
+            </span>
+        </div>
+        <div class="best-12-item-stats">
+            <span class="best-12-item-winrate ${winrateClass}">${formatPercent(item.win_rate)}</span>
+            ${powerspikeHtml}
+        </div>
+    `;
+
+    return card;
+}
+
+/**
+ * Render the build path view with soul-based brackets and upgrade chains
+ * @param {Object} buildPathData - Response from the build path API
+ * @param {Map} itemImages - Map of item_id -> image URL
+ */
+function renderBuildPath(buildPathData, itemImages) {
+    const container_0_5k = document.getElementById('phase-0-5k-items');
+    const container_5_10k = document.getElementById('phase-5-10k-items');
+    const container_10_20k = document.getElementById('phase-10-20k-items');
+    const container_20k = document.getElementById('phase-20k-items');
+    const chainsContainer = document.getElementById('upgrade-chains');
+
+    // Render soul bracket-based items
+    const phases = buildPathData.build_phases || {};
+
+    // 0-5k Souls
+    if (container_0_5k) {
+        container_0_5k.innerHTML = '';
+        const items = phases['0-5k']?.items || [];
+        if (items.length > 0) {
+            items.forEach(item => {
+                container_0_5k.appendChild(createPhaseItemCard(item));
+            });
+        } else {
+            container_0_5k.innerHTML = '<p class="no-data">No items</p>';
+        }
+    }
+
+    // 5-10k Souls
+    if (container_5_10k) {
+        container_5_10k.innerHTML = '';
+        const items = phases['5-10k']?.items || [];
+        if (items.length > 0) {
+            items.forEach(item => {
+                container_5_10k.appendChild(createPhaseItemCard(item));
+            });
+        } else {
+            container_5_10k.innerHTML = '<p class="no-data">No items</p>';
+        }
+    }
+
+    // 10-20k Souls
+    if (container_10_20k) {
+        container_10_20k.innerHTML = '';
+        const items = phases['10-20k']?.items || [];
+        if (items.length > 0) {
+            items.forEach(item => {
+                container_10_20k.appendChild(createPhaseItemCard(item));
+            });
+        } else {
+            container_10_20k.innerHTML = '<p class="no-data">No items</p>';
+        }
+    }
+
+    // 20k+ Souls
+    if (container_20k) {
+        container_20k.innerHTML = '';
+        const items = phases['20k+']?.items || [];
+        if (items.length > 0) {
+            items.forEach(item => {
+                container_20k.appendChild(createPhaseItemCard(item));
+            });
+        } else {
+            container_20k.innerHTML = '<p class="no-data">No items</p>';
+        }
+    }
+
+    // Render upgrade chains (in collapsed section)
+    if (chainsContainer) {
+        chainsContainer.innerHTML = '';
+        if (buildPathData.recommended_chains && buildPathData.recommended_chains.length > 0) {
+            buildPathData.recommended_chains.forEach(chain => {
+                chainsContainer.appendChild(createUpgradeChainCard(chain, itemImages));
+            });
+        } else {
+            chainsContainer.innerHTML = '<p class="no-data">No upgrade chains available</p>';
+        }
+    }
+}
+
+/**
+ * Get all items from build path data as flat array for adding to build
+ * @param {Object} buildPathData - Response from build path API
+ * @returns {Array} Array of items with basic info
+ */
+function getBuildPathItems(buildPathData) {
+    const items = [];
+    const seenIds = new Set();
+
+    // Get items from phase-based build
+    if (buildPathData.build_phases) {
+        const phases = ['early_game', 'mid_game', 'late_game'];
+        phases.forEach(phase => {
+            const phaseData = buildPathData.build_phases[phase];
+            if (phaseData && phaseData.items) {
+                phaseData.items.forEach(item => {
+                    if (!seenIds.has(item.item_id)) {
+                        seenIds.add(item.item_id);
+                        items.push({
+                            item_id: item.item_id,
+                            name: item.name,
+                            tier: item.tier,
+                            cost: item.cost,
+                            slot: item.slot,
+                            image: item.image,
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    // Get items from chains
+    if (buildPathData.recommended_chains) {
+        buildPathData.recommended_chains.forEach(chain => {
+            chain.items.forEach(item => {
+                if (!seenIds.has(item.item_id)) {
+                    seenIds.add(item.item_id);
+                    items.push({
+                        item_id: item.item_id,
+                        name: item.name,
+                        tier: item.tier,
+                        cost: item.cost,
+                    });
+                }
+            });
+        });
+    }
+
+    // Get standalone items
+    if (buildPathData.standalone_items) {
+        buildPathData.standalone_items.forEach(item => {
+            if (!seenIds.has(item.item_id)) {
+                seenIds.add(item.item_id);
+                items.push({
+                    item_id: item.item_id,
+                    name: item.name,
+                    tier: item.tier,
+                    cost: item.cost,
+                });
+            }
+        });
+    }
+
+    return items;
+}
+
+// ============ Ability Build Components ============
+
+/**
+ * Create an ability icon element
+ * @param {Object} ability - Ability data from items API
+ * @param {number} level - The level at which this ability is picked (1-indexed)
+ * @returns {HTMLElement}
+ */
+function createAbilityIcon(ability, level) {
+    const icon = document.createElement('div');
+    icon.className = 'ability-icon';
+    icon.dataset.abilityId = ability?.id || 0;
+
+    if (!ability) {
+        icon.classList.add('ability-unknown');
+        icon.innerHTML = `<span class="ability-level">${level}</span><span>?</span>`;
+        return icon;
+    }
+
+    // Determine ability type for coloring based on class_name
+    const className = ability.class_name || '';
+    if (className.includes('signature4') || className.includes('ultimate')) {
+        icon.classList.add('ability-ultimate');
+    } else if (className.includes('signature1') || className.includes('ability_1')) {
+        icon.classList.add('ability-1');
+    } else if (className.includes('signature2') || className.includes('ability_2')) {
+        icon.classList.add('ability-2');
+    } else if (className.includes('signature3') || className.includes('ability_3')) {
+        icon.classList.add('ability-3');
+    }
+
+    const imageUrl = ability.image || '';
+    icon.innerHTML = `
+        <span class="ability-level">${level}</span>
+        ${imageUrl ? `<img src="${imageUrl}" alt="${escapeHtml(ability.name || 'Ability')}" title="${escapeHtml(ability.name || 'Ability')}">` : `<span>${escapeHtml((ability.name || '?').substring(0, 1))}</span>`}
+    `;
+
+    return icon;
+}
+
+/**
+ * Create an ability sequence card showing a complete build order
+ * @param {Object} sequence - Sequence data from API {abilities: [], wins, losses, matches, ...}
+ * @param {Map} abilitiesMap - Map of ability_id -> ability data
+ * @param {number} rank - Ranking position (1, 2, 3, ...)
+ * @returns {HTMLElement}
+ */
+function createAbilitySequenceCard(sequence, abilitiesMap, rank) {
+    const card = document.createElement('div');
+    card.className = 'ability-sequence-card';
+
+    const winRate = sequence.matches > 0 ? sequence.wins / sequence.matches : 0;
+    let winrateClass = 'neutral';
+    if (winRate > 0.52) winrateClass = 'positive';
+    else if (winRate < 0.48) winrateClass = 'negative';
+
+    // Calculate KDA
+    const kills = sequence.total_kills || 0;
+    const deaths = sequence.total_deaths || 0;
+    const assists = sequence.total_assists || 0;
+    const avgKills = sequence.matches > 0 ? (kills / sequence.matches).toFixed(1) : '0';
+    const avgDeaths = sequence.matches > 0 ? (deaths / sequence.matches).toFixed(1) : '0';
+    const avgAssists = sequence.matches > 0 ? (assists / sequence.matches).toFixed(1) : '0';
+
+    // Create ability sequence icons
+    const abilitiesHtml = sequence.abilities.map((abilityId, index) => {
+        const ability = abilitiesMap.get(abilityId);
+        const iconEl = createAbilityIcon(ability, index + 1);
+        return iconEl.outerHTML;
+    }).join('');
+
+    card.innerHTML = `
+        <div class="sequence-header">
+            <span class="sequence-rank">#${rank}</span>
+            <span class="sequence-winrate ${winrateClass}">${formatPercent(winRate)}</span>
+            <span class="sequence-matches">${formatNumber(sequence.matches)} matches</span>
+        </div>
+        <div class="sequence-abilities">
+            ${abilitiesHtml}
+        </div>
+        <div class="sequence-footer">
+            <span class="sequence-kda">${avgKills} / ${avgDeaths} / ${avgAssists} KDA</span>
+        </div>
+    `;
+
+    return card;
+}
+
+/**
+ * Render the abilities view with all sequences
+ * @param {Array} abilityStats - Array of ability sequences from API
+ * @param {Map} abilitiesMap - Map of ability_id -> ability data
+ */
+function renderAbilitiesView(abilityStats, abilitiesMap) {
+    const container = document.getElementById('ability-sequences');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!abilityStats || abilityStats.length === 0) {
+        container.innerHTML = '<p class="no-data">No ability data available for this hero.</p>';
+        return;
+    }
+
+    // Sort by matches (popularity) first, then by win rate
+    const sortedStats = [...abilityStats].sort((a, b) => {
+        // Primary sort: matches (popularity)
+        if (b.matches !== a.matches) {
+            return b.matches - a.matches;
+        }
+        // Secondary sort: win rate
+        const wrA = a.matches > 0 ? a.wins / a.matches : 0;
+        const wrB = b.matches > 0 ? b.wins / b.matches : 0;
+        return wrB - wrA;
+    });
+
+    // Take top 10 sequences
+    const topSequences = sortedStats.slice(0, 10);
+
+    topSequences.forEach((sequence, index) => {
+        const card = createAbilitySequenceCard(sequence, abilitiesMap, index + 1);
+        container.appendChild(card);
+    });
+}
+
+// ============ Synergy Components ============
+
+/**
+ * Create synergy badges HTML for an item card
+ * Shows top 2 items that pair well with this item
+ * @param {number} itemId - The item ID to find synergies for
+ * @param {Map} synergyMap - Map of itemId -> [{pairedItemId, winRate, matches}, ...]
+ * @param {Map} itemImagesMap - Map of item_id -> image URL
+ * @param {number} maxBadges - Maximum number of badges to show (default 2)
+ * @returns {string} HTML string for synergy badges
+ */
+function createSynergyBadges(itemId, synergyMap, itemImagesMap, maxBadges = 2) {
+    if (!synergyMap || synergyMap.size === 0) return '';
+
+    const synergies = synergyMap.get(itemId) || [];
+    // Filter to synergies with high match count and good win rate
+    const topSynergies = synergies
+        .filter(s => s.matches >= 500 && s.winRate >= 0.50)
+        .slice(0, maxBadges);
+
+    if (topSynergies.length === 0) return '';
+
+    const badgesHtml = topSynergies.map(syn => {
+        const imageUrl = itemImagesMap.get(syn.itemId) || '';
+        return `
+            <span class="synergy-badge" title="${formatPercent(syn.winRate)} together">
+                ${imageUrl ? `<img src="${imageUrl}" alt="">` : '?'}
+            </span>
+        `;
+    }).join('');
+
+    return `
+        <div class="item-synergies">
+            <span class="synergy-label">Pairs with:</span>
+            ${badgesHtml}
+        </div>
+    `;
+}
+
+/**
+ * Create a synergy pair card for the synergies panel view
+ * @param {Object} pair - Pair data {item_ids: [id1, id2], wins, losses, matches}
+ * @param {Map} itemImagesMap - Map of item_id -> image URL
+ * @param {Map} itemNamesMap - Map of item_id -> item name
+ * @returns {HTMLElement}
+ */
+function createSynergyPairCard(pair, itemImagesMap, itemNamesMap) {
+    const card = document.createElement('div');
+    card.className = 'synergy-pair-card';
+
+    const [id1, id2] = pair.item_ids || [];
+    const matches = pair.matches || 0;
+    const wins = pair.wins || 0;
+    const winRate = matches > 0 ? wins / matches : 0;
+
+    let winrateClass = 'neutral';
+    if (winRate > 0.52) winrateClass = 'positive';
+    else if (winRate < 0.48) winrateClass = 'negative';
+
+    const img1 = itemImagesMap.get(id1) || '';
+    const img2 = itemImagesMap.get(id2) || '';
+    const name1 = itemNamesMap.get(id1) || 'Item';
+    const name2 = itemNamesMap.get(id2) || 'Item';
+
+    card.innerHTML = `
+        <div class="synergy-items">
+            <div class="synergy-item" title="${escapeHtml(name1)}">
+                ${img1 ? `<img src="${img1}" alt="${escapeHtml(name1)}">` : `<span>${escapeHtml(name1.substring(0, 3))}</span>`}
+            </div>
+            <span class="synergy-plus">+</span>
+            <div class="synergy-item" title="${escapeHtml(name2)}">
+                ${img2 ? `<img src="${img2}" alt="${escapeHtml(name2)}">` : `<span>${escapeHtml(name2.substring(0, 3))}</span>`}
+            </div>
+        </div>
+        <div class="synergy-stats">
+            <span class="synergy-winrate ${winrateClass}">${formatPercent(winRate)}</span>
+            <span class="synergy-matches">${formatNumber(matches)} games</span>
+        </div>
+    `;
+
+    return card;
+}
+
+/**
+ * Render the synergies view panel
+ * @param {Array} synergyData - Raw permutation data from API
+ * @param {Map} itemImagesMap - Map of item_id -> image URL
+ * @param {Map} itemNamesMap - Map of item_id -> item name
+ */
+function renderSynergiesView(synergyData, itemImagesMap, itemNamesMap) {
+    const container = document.getElementById('synergy-pairs');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!synergyData || synergyData.length === 0) {
+        container.innerHTML = '<p class="no-data">No synergy data available.</p>';
+        return;
+    }
+
+    // Sort by win rate, filter to pairs with sufficient matches
+    const sortedPairs = synergyData
+        .filter(p => p.matches >= 500)
+        .sort((a, b) => {
+            const wrA = a.wins / a.matches;
+            const wrB = b.wins / b.matches;
+            return wrB - wrA;
+        })
+        .slice(0, 50);  // Top 50 pairs
+
+    if (sortedPairs.length === 0) {
+        container.innerHTML = '<p class="no-data">Not enough data for synergy analysis.</p>';
+        return;
+    }
+
+    sortedPairs.forEach(pair => {
+        const card = createSynergyPairCard(pair, itemImagesMap, itemNamesMap);
+        container.appendChild(card);
+    });
+}
+
 // Export for use in app.js
 const Components = {
     createItemCard,
@@ -964,4 +1559,19 @@ const Components = {
     formatNetworth,
     formatTime,
     escapeHtml,
+    // Build path components
+    createUpgradeChainCard,
+    createStandaloneItemCard,
+    createBest12ItemCard,
+    createPhaseItemCard,
+    renderBuildPath,
+    getBuildPathItems,
+    // Ability build components
+    createAbilityIcon,
+    createAbilitySequenceCard,
+    renderAbilitiesView,
+    // Synergy components
+    createSynergyBadges,
+    createSynergyPairCard,
+    renderSynergiesView,
 };

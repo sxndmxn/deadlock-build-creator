@@ -6,10 +6,22 @@ const state = {
     selectedHeroId: null,
     selectedNetworth: 3000,
     itemData: null,  // { hero_id, hero_name, tiers: { "1": [...], "2": [...], ... } }
+    buildPathData: null,  // { hero_id, hero_name, recommended_chains, standalone_items }
+    itemImagesMap: new Map(),  // item_id -> image URL
     build: Array(12).fill(null),  // 12 slots
     isLoading: false,
-    viewMode: 'tier',  // 'tier' or 'phase'
+    viewMode: 'build',  // 'build', 'tier', 'phase', 'abilities', or 'synergies'
     sortBy: 'winrate',  // 'winrate', 'popularity', or 'buy_order'
+    abilitiesData: null,  // Ability order stats from API
+    abilitiesLoaded: false,  // Track if abilities have been loaded for current hero
+    // Rank filter state
+    ranks: [],  // Cached from /v2/ranks
+    selectedRankMin: null,  // Badge level 0-116, null = no filter
+    selectedRankMax: null,  // Badge level 0-116, null = no filter
+    // Synergy state
+    synergyData: null,  // Raw permutation stats
+    synergyMap: new Map(),  // itemId -> [{pairedItemId, winRate, matches}, ...]
+    synergiesLoaded: false,  // Track if synergies loaded for current hero+rank
 };
 
 // DOM Elements
@@ -32,20 +44,42 @@ const elements = {
     totalMatches: document.getElementById('total-matches'),
     heroWinrate: document.getElementById('hero-winrate'),
     itemsTracked: document.getElementById('items-tracked'),
+    heroPowerspike: document.getElementById('hero-powerspike'),
     timelineSection: document.getElementById('timeline-section'),
     timelineItems: document.getElementById('timeline-items'),
     autoFillBuild: document.getElementById('auto-fill-build'),
     viewButtons: document.querySelectorAll('.view-btn'),
     phasesContainer: document.getElementById('phases-container'),
     sortButtons: document.querySelectorAll('.sort-btn'),
+    buildPathContainer: document.getElementById('build-path-container'),
+    upgradeChainsContainer: document.getElementById('upgrade-chains'),
+    standaloneItemsContainer: document.getElementById('standalone-items'),
+    abilitiesContainer: document.getElementById('abilities-container'),
+    abilitiesLoading: document.getElementById('abilities-loading'),
+    abilitySequences: document.getElementById('ability-sequences'),
+    // Rank filter elements
+    rankFilterWrapper: document.getElementById('rank-filter-wrapper'),
+    rankFilterTrigger: document.getElementById('rank-filter-trigger'),
+    rankFilterDropdown: document.getElementById('rank-filter-dropdown'),
+    // Synergy elements
+    synergiesContainer: document.getElementById('synergies-container'),
+    synergiesLoading: document.getElementById('synergies-loading'),
+    synergyPairs: document.getElementById('synergy-pairs'),
 };
 
 // Initialize application
 async function init() {
     try {
-        // Load heroes
-        state.heroes = await API.fetchHeroes();
+        // Load heroes and ranks in parallel
+        const [heroes, ranks] = await Promise.all([
+            API.fetchHeroes(),
+            API.fetchRanks(),
+        ]);
+        state.heroes = heroes;
+        state.ranks = ranks;
+
         populateHeroSelect();
+        populateRankDropdown();
 
         // Set up event listeners
         setupEventListeners();
@@ -54,7 +88,7 @@ async function init() {
         hideLoading();
     } catch (error) {
         console.error('Failed to initialize:', error);
-        showToast('Failed to load heroes. Please refresh the page.', 'error');
+        showToast('Failed to load data. Please refresh the page.', 'error');
         hideLoading();
     }
 }
@@ -80,10 +114,96 @@ function populateHeroSelect() {
     });
 }
 
+function populateRankDropdown() {
+    if (!elements.rankFilterDropdown) return;
+
+    // Sort ranks by tier (ascending)
+    const sortedRanks = [...state.ranks].sort((a, b) => a.tier - b.tier);
+
+    elements.rankFilterDropdown.innerHTML = '';
+
+    // Add "All Ranks" option
+    const allOption = document.createElement('div');
+    allOption.className = 'rank-option selected';
+    allOption.dataset.minBadge = '';
+    allOption.dataset.maxBadge = '';
+    allOption.innerHTML = '<span>All Ranks</span>';
+    elements.rankFilterDropdown.appendChild(allOption);
+
+    // Add each rank tier
+    sortedRanks.forEach(rank => {
+        const option = document.createElement('div');
+        option.className = 'rank-option';
+        // Badge calculation: tier * 10 + subrank (0-5 for 6 subranks)
+        // For simplicity, filter by entire tier: minBadge = tier*10, maxBadge = tier*10+9
+        const minBadge = rank.tier * 10;
+        const maxBadge = rank.tier * 10 + 9;
+        option.dataset.minBadge = minBadge;
+        option.dataset.maxBadge = maxBadge;
+
+        const iconUrl = rank.images?.large || rank.images?.small || '';
+        option.innerHTML = `
+            ${iconUrl ? `<img src="${iconUrl}" alt="${rank.name}" loading="lazy">` : ''}
+            <span>${rank.name}</span>
+        `;
+        elements.rankFilterDropdown.appendChild(option);
+    });
+}
+
 function toggleHeroDropdown(open) {
     const isOpen = open ?? elements.heroSelectDropdown.classList.contains('hidden');
     elements.heroSelectDropdown.classList.toggle('hidden', !isOpen);
     elements.heroSelectTrigger.classList.toggle('open', isOpen);
+}
+
+function toggleRankDropdown(open) {
+    if (!elements.rankFilterDropdown || !elements.rankFilterTrigger) return;
+    const isOpen = open ?? elements.rankFilterDropdown.classList.contains('hidden');
+    elements.rankFilterDropdown.classList.toggle('hidden', !isOpen);
+    elements.rankFilterTrigger.classList.toggle('open', isOpen);
+}
+
+function selectRank(minBadge, maxBadge, selectedOption) {
+    state.selectedRankMin = minBadge;
+    state.selectedRankMax = maxBadge;
+
+    // Update UI - remove selected from all, add to clicked option
+    elements.rankFilterDropdown.querySelectorAll('.rank-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    if (selectedOption) {
+        selectedOption.classList.add('selected');
+    }
+
+    // Update trigger text/icon
+    const triggerText = elements.rankFilterTrigger.querySelector('.rank-filter-text');
+    if (triggerText) {
+        if (minBadge === null && maxBadge === null) {
+            triggerText.innerHTML = 'All Ranks';
+        } else {
+            const rank = state.ranks.find(r => r.tier * 10 === minBadge);
+            if (rank) {
+                const iconUrl = rank.images?.large || rank.images?.small || '';
+                triggerText.innerHTML = `
+                    ${iconUrl ? `<img src="${iconUrl}" alt="${rank.name}">` : ''}
+                    <span>${rank.name}</span>
+                `;
+            }
+        }
+    }
+
+    // Close dropdown
+    toggleRankDropdown(false);
+
+    // Clear synergy cache since rank changed
+    API.clearSynergyCache();
+    state.synergiesLoaded = false;
+    state.synergyMap = new Map();
+
+    // Re-fetch items with new rank filter if hero is selected
+    if (state.selectedHeroId) {
+        loadHeroItems(state.selectedHeroId);
+    }
 }
 
 function selectHero(heroId) {
@@ -122,7 +242,29 @@ function setupEventListeners() {
         if (!elements.heroSelectWrapper.contains(e.target)) {
             toggleHeroDropdown(false);
         }
+        if (elements.rankFilterWrapper && !elements.rankFilterWrapper.contains(e.target)) {
+            toggleRankDropdown(false);
+        }
     });
+
+    // Rank filter dropdown toggle
+    if (elements.rankFilterTrigger) {
+        elements.rankFilterTrigger.addEventListener('click', () => {
+            toggleRankDropdown();
+        });
+    }
+
+    // Rank selection from dropdown
+    if (elements.rankFilterDropdown) {
+        elements.rankFilterDropdown.addEventListener('click', (e) => {
+            const option = e.target.closest('.rank-option');
+            if (option) {
+                const minBadge = option.dataset.minBadge === '' ? null : parseInt(option.dataset.minBadge, 10);
+                const maxBadge = option.dataset.maxBadge === '' ? null : parseInt(option.dataset.maxBadge, 10);
+                selectRank(minBadge, maxBadge, option);
+            }
+        });
+    }
 
     // Networth filter buttons
     elements.networthButtons.forEach(btn => {
@@ -217,6 +359,27 @@ function setupEventListeners() {
         }
     });
 
+    // Build path container item clicks (delegated)
+    elements.buildPathContainer.addEventListener('click', (e) => {
+        const chainItem = e.target.closest('.chain-item');
+        const standaloneCard = e.target.closest('.standalone-item-card');
+        const best12Item = e.target.closest('.best-12-item');
+
+        if (chainItem) {
+            const itemId = parseInt(chainItem.dataset.itemId, 10);
+            const item = findBuildPathItem(itemId);
+            if (item) addToBuild(item);
+        } else if (standaloneCard) {
+            const itemId = parseInt(standaloneCard.dataset.itemId, 10);
+            const item = findBuildPathItem(itemId);
+            if (item) addToBuild(item);
+        } else if (best12Item) {
+            const itemId = parseInt(best12Item.dataset.itemId, 10);
+            const item = findBuildPathItem(itemId);
+            if (item) addToBuild(item);
+        }
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -228,15 +391,137 @@ function setupEventListeners() {
 async function loadHeroItems(heroId) {
     showLoading();
     state.selectedHeroId = heroId;
+    state.buildPathData = null;  // Reset build path data when hero changes
+    state.abilitiesData = null;  // Reset abilities data when hero changes
+    state.abilitiesLoaded = false;
+    state.synergiesLoaded = false;  // Reset synergies when hero changes
+    state.synergyMap = new Map();
 
     try {
-        state.itemData = await API.fetchBuildCreatorItems(heroId);
+        // Load items metadata first (needed for both views)
+        const itemsMetadata = await API.fetchItemsMetadata();
+
+        // Build image map from items metadata
+        state.itemImagesMap.clear();
+        itemsMetadata.forEach(item => {
+            if (item.shop_image || item.image) {
+                state.itemImagesMap.set(item.id, item.shop_image || item.image);
+            }
+        });
+
+        // Load item stats and synergies in parallel (with rank filter if set)
+        const [itemData, synergyData] = await Promise.all([
+            API.fetchBuildCreatorItems(heroId, state.selectedRankMin, state.selectedRankMax),
+            API.fetchItemSynergies(heroId, state.selectedRankMin, state.selectedRankMax).catch(() => []),
+        ]);
+
+        state.itemData = itemData;
+        state.synergyData = synergyData;
+        state.synergyMap = API.buildSynergyMap(synergyData);
+        state.synergiesLoaded = true;
+
+        // Build upgrade chains client-side
+        state.buildPathData = API.buildUpgradeChains(itemsMetadata, state.itemData);
+        console.log('Built upgrade chains:', state.buildPathData);
+
+        // Render build path view
+        Components.renderBuildPath(state.buildPathData, state.itemImagesMap);
+
         renderAllTiers();
         hideLoading();
     } catch (error) {
         console.error('Failed to load items:', error);
         showToast(`Failed to load items: ${error.message}`, 'error');
         hideLoading();
+    }
+}
+
+async function loadSynergies(heroId) {
+    // Show loading state
+    if (elements.synergiesLoading) {
+        elements.synergiesLoading.classList.remove('hidden');
+    }
+    if (elements.synergyPairs) {
+        elements.synergyPairs.innerHTML = '';
+    }
+
+    try {
+        // Use already loaded synergy data if available, otherwise fetch
+        let synergyData = state.synergyData;
+        if (!synergyData || synergyData.length === 0) {
+            synergyData = await API.fetchItemSynergies(
+                heroId,
+                state.selectedRankMin,
+                state.selectedRankMax
+            );
+            state.synergyData = synergyData;
+            state.synergyMap = API.buildSynergyMap(synergyData);
+        }
+
+        state.synergiesLoaded = true;
+
+        // Build item names map for display
+        const itemNamesMap = new Map();
+        const itemsMetadata = await API.fetchItemsMetadata();
+        itemsMetadata.forEach(item => {
+            itemNamesMap.set(item.id, item.name);
+        });
+
+        // Render synergies view
+        Components.renderSynergiesView(synergyData, state.itemImagesMap, itemNamesMap);
+
+        if (elements.synergiesLoading) {
+            elements.synergiesLoading.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error('Failed to load synergies:', error);
+        if (elements.synergiesLoading) {
+            elements.synergiesLoading.classList.add('hidden');
+        }
+        if (elements.synergyPairs) {
+            elements.synergyPairs.innerHTML = '<p class="no-data">Failed to load synergy data.</p>';
+        }
+        showToast(`Failed to load synergies: ${error.message}`, 'error');
+    }
+}
+
+async function loadAbilities(heroId) {
+    if (state.abilitiesLoaded && state.selectedHeroId === heroId) {
+        return; // Already loaded for this hero
+    }
+
+    // Show loading state
+    elements.abilitiesLoading.classList.remove('hidden');
+    elements.abilitySequences.innerHTML = '';
+
+    try {
+        // Fetch ability stats and all abilities data in parallel
+        const [abilityStats, abilities] = await Promise.all([
+            API.fetchAbilityStats(heroId),
+            API.fetchAbilities(),
+        ]);
+
+        state.abilitiesData = abilityStats;
+
+        // Build abilities map (id -> ability object)
+        const abilitiesMap = new Map();
+        abilities.forEach(ability => {
+            if (ability.id) {
+                abilitiesMap.set(ability.id, ability);
+            }
+        });
+
+        state.abilitiesLoaded = true;
+
+        // Render abilities view
+        Components.renderAbilitiesView(abilityStats, abilitiesMap);
+
+        elements.abilitiesLoading.classList.add('hidden');
+    } catch (error) {
+        console.error('Failed to load abilities:', error);
+        elements.abilitiesLoading.classList.add('hidden');
+        elements.abilitySequences.innerHTML = '<p class="no-data">Failed to load ability data.</p>';
+        showToast(`Failed to load abilities: ${error.message}`, 'error');
     }
 }
 
@@ -250,7 +535,7 @@ function renderAllTiers() {
 
     ['1', '2', '3', '4'].forEach(tier => {
         const items = state.itemData.tiers[tier] || [];
-        Components.renderTierItems(tier, items, state.sortBy);
+        Components.renderTierItems(tier, items, state.sortBy, state.synergyMap, state.itemImagesMap);
 
         // Aggregate stats
         items.forEach(item => {
@@ -268,6 +553,14 @@ function renderAllTiers() {
     elements.totalMatches.textContent = Components.formatNumber(totalMatches);
     elements.heroWinrate.textContent = Components.formatPercent(overallWinrate);
     elements.itemsTracked.textContent = itemCount;
+
+    // Display powerspike info
+    if (state.buildPathData && state.buildPathData.powerspike) {
+        const ps = state.buildPathData.powerspike;
+        elements.heroPowerspike.textContent = `${ps.name}min (${Components.formatPercent(ps.winRate)})`;
+    } else {
+        elements.heroPowerspike.textContent = '-';
+    }
 
     // Collect all items for timeline and phase view
     const allItems = [];
@@ -310,12 +603,36 @@ function setSortBy(sortBy) {
 }
 
 function applyViewMode() {
+    // Hide all containers first
+    elements.tiersContainer.classList.add('hidden');
+    elements.phasesContainer.classList.add('hidden');
+    elements.buildPathContainer.classList.add('hidden');
+    elements.abilitiesContainer.classList.add('hidden');
+    if (elements.synergiesContainer) {
+        elements.synergiesContainer.classList.add('hidden');
+    }
+
+    // Show the active container
     if (state.viewMode === 'tier') {
         elements.tiersContainer.classList.remove('hidden');
-        elements.phasesContainer.classList.add('hidden');
-    } else {
-        elements.tiersContainer.classList.add('hidden');
+    } else if (state.viewMode === 'phase') {
         elements.phasesContainer.classList.remove('hidden');
+    } else if (state.viewMode === 'build') {
+        elements.buildPathContainer.classList.remove('hidden');
+    } else if (state.viewMode === 'abilities') {
+        elements.abilitiesContainer.classList.remove('hidden');
+        // Load abilities if not already loaded
+        if (!state.abilitiesLoaded && state.selectedHeroId) {
+            loadAbilities(state.selectedHeroId);
+        }
+    } else if (state.viewMode === 'synergies') {
+        if (elements.synergiesContainer) {
+            elements.synergiesContainer.classList.remove('hidden');
+        }
+        // Load synergies if not already loaded
+        if (!state.synergiesLoaded && state.selectedHeroId) {
+            loadSynergies(state.selectedHeroId);
+        }
     }
 }
 
@@ -352,6 +669,53 @@ function findItem(itemId) {
         const item = tier.find(i => i.item_id === itemId);
         if (item) return item;
     }
+    return null;
+}
+
+function findBuildPathItem(itemId) {
+    if (!state.buildPathData) return null;
+
+    // Search in best_12 items (now an array)
+    if (state.buildPathData.best_12 && Array.isArray(state.buildPathData.best_12)) {
+        const item = state.buildPathData.best_12.find(i => i.item_id === itemId);
+        if (item) {
+            return {
+                item_id: item.item_id,
+                name: item.name,
+                tier: item.tier,
+                image: item.image || state.itemImagesMap.get(item.item_id) || null,
+            };
+        }
+    }
+
+    // Search in chains
+    if (state.buildPathData.recommended_chains) {
+        for (const chain of state.buildPathData.recommended_chains) {
+            const item = chain.items.find(i => i.item_id === itemId);
+            if (item) {
+                return {
+                    item_id: item.item_id,
+                    name: item.name,
+                    tier: item.tier,
+                    image: item.image || state.itemImagesMap.get(item.item_id) || null,
+                };
+            }
+        }
+    }
+
+    // Search in standalone items
+    if (state.buildPathData.standalone_items) {
+        const item = state.buildPathData.standalone_items.find(i => i.item_id === itemId);
+        if (item) {
+            return {
+                item_id: item.item_id,
+                name: item.name,
+                tier: item.tier,
+                image: item.image || state.itemImagesMap.get(item.item_id) || null,
+            };
+        }
+    }
+
     return null;
 }
 

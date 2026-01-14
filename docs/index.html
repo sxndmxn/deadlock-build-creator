@@ -17,6 +17,13 @@
                 </div>
                 <div class="hero-select-dropdown hidden" id="hero-select-dropdown"></div>
             </div>
+            <div class="rank-filter-wrapper" id="rank-filter-wrapper">
+                <div class="rank-filter-trigger" id="rank-filter-trigger">
+                    <span class="rank-filter-text">All Ranks</span>
+                    <span class="rank-filter-arrow">▼</span>
+                </div>
+                <div class="rank-filter-dropdown hidden" id="rank-filter-dropdown"></div>
+            </div>
         </header>
 
         <main class="main-content">
@@ -38,9 +45,16 @@
                     <span class="stat-chip-label">Items Tracked</span>
                     <span class="stat-chip-value" id="items-tracked">-</span>
                 </div>
+                <div class="stat-chip" id="powerspike-chip">
+                    <span class="stat-chip-label">Powerspike</span>
+                    <span class="stat-chip-value" id="hero-powerspike">-</span>
+                </div>
                 <div class="view-toggle">
-                    <button class="view-btn active" data-view="tier">By Tier</button>
+                    <button class="view-btn active" data-view="build">Build Path</button>
+                    <button class="view-btn" data-view="tier">By Tier</button>
                     <button class="view-btn" data-view="phase">By Phase</button>
+                    <button class="view-btn" data-view="abilities">Abilities</button>
+                    <button class="view-btn" data-view="synergies">Synergies</button>
                 </div>
                 <div class="sort-toggle">
                     <span class="sort-label">Sort:</span>
@@ -50,21 +64,21 @@
                 </div>
             </div>
 
-            <div class="tiers-container" id="tiers-container">
+            <div class="tiers-container hidden" id="tiers-container">
                 <div class="tier-column" data-tier="1">
-                    <h2 class="tier-header">Tier 1 <span class="tier-cost">(500)</span></h2>
+                    <h2 class="tier-header">Tier 1 <span class="tier-cost">(800)</span></h2>
                     <div class="items-list" id="tier-1-items"></div>
                 </div>
                 <div class="tier-column" data-tier="2">
-                    <h2 class="tier-header">Tier 2 <span class="tier-cost">(1,250)</span></h2>
+                    <h2 class="tier-header">Tier 2 <span class="tier-cost">(1,600)</span></h2>
                     <div class="items-list" id="tier-2-items"></div>
                 </div>
                 <div class="tier-column" data-tier="3">
-                    <h2 class="tier-header">Tier 3 <span class="tier-cost">(3,000)</span></h2>
+                    <h2 class="tier-header">Tier 3 <span class="tier-cost">(3,200)</span></h2>
                     <div class="items-list" id="tier-3-items"></div>
                 </div>
                 <div class="tier-column" data-tier="4">
-                    <h2 class="tier-header">Tier 4 <span class="tier-cost">(6,200+)</span></h2>
+                    <h2 class="tier-header">Tier 4 <span class="tier-cost">(6,400)</span></h2>
                     <div class="items-list" id="tier-4-items"></div>
                 </div>
             </div>
@@ -90,6 +104,80 @@
                     <h2 class="phase-header">30+ min</h2>
                     <div class="items-list" id="phase-30-plus-items"></div>
                 </div>
+            </div>
+
+            <!-- Build Path View -->
+            <div class="build-path-container" id="build-path-container">
+                <div class="build-path-header">
+                    <h2>Recommended Build</h2>
+                    <p class="build-path-description">Best items for each game phase, sorted by phase-specific win rate.</p>
+                </div>
+
+                <!-- Soul-based Build Guide -->
+                <div class="build-phases" id="build-phases">
+                    <div class="build-phase" data-phase="0-5k">
+                        <div class="phase-header">
+                            <h3>0-5k Souls</h3>
+                            <p class="phase-desc">Starting items</p>
+                        </div>
+                        <div class="phase-items" id="phase-0-5k-items"></div>
+                    </div>
+                    <div class="build-phase" data-phase="5-10k">
+                        <div class="phase-header">
+                            <h3>5-10k Souls</h3>
+                            <p class="phase-desc">First power spike</p>
+                        </div>
+                        <div class="phase-items" id="phase-5-10k-items"></div>
+                    </div>
+                    <div class="build-phase" data-phase="10-20k">
+                        <div class="phase-header">
+                            <h3>10-20k Souls</h3>
+                            <p class="phase-desc">Mid game core</p>
+                        </div>
+                        <div class="phase-items" id="phase-10-20k-items"></div>
+                    </div>
+                    <div class="build-phase" data-phase="20k+">
+                        <div class="phase-header">
+                            <h3>20k+ Souls</h3>
+                            <p class="phase-desc">Late game</p>
+                        </div>
+                        <div class="phase-items" id="phase-20k-items"></div>
+                    </div>
+                </div>
+
+                <!-- Upgrade Chains (collapsed by default) -->
+                <details class="upgrade-chains-details">
+                    <summary>View Upgrade Chains</summary>
+                    <div class="upgrade-chains-section">
+                        <div class="upgrade-chains" id="upgrade-chains"></div>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Abilities View -->
+            <div class="abilities-container hidden" id="abilities-container">
+                <div class="abilities-header">
+                    <h2>Ability Build Orders</h2>
+                    <p class="abilities-description">Most popular and highest win rate ability upgrade sequences.</p>
+                </div>
+                <div class="abilities-loading hidden" id="abilities-loading">
+                    <div class="spinner"></div>
+                    <p>Loading ability data...</p>
+                </div>
+                <div class="ability-sequences" id="ability-sequences"></div>
+            </div>
+
+            <!-- Synergies View -->
+            <div class="synergies-container hidden" id="synergies-container">
+                <div class="synergies-header">
+                    <h2>Item Synergies</h2>
+                    <p class="synergies-description">Items that work well together, based on win rate when purchased in the same game.</p>
+                </div>
+                <div class="synergies-loading hidden" id="synergies-loading">
+                    <div class="spinner"></div>
+                    <p>Loading synergy data...</p>
+                </div>
+                <div class="synergy-pairs" id="synergy-pairs"></div>
             </div>
 
             <!-- Purchase Timeline -->
