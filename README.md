@@ -1,4 +1,24 @@
-# Deadlock API
+# Deadlock Build Creator
+
+This repository includes a browser interface for Deadlock build analysis in [docs/](docs/).
+The interface reads public Deadlock API data directly.
+It includes hero selection, rank filters, item statistics, and item combinations.
+
+## Run the browser interface
+
+From the repository root, run:
+
+```bash
+python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
+```
+
+Open `http://127.0.0.1:8000`.
+The browser requires network access to the public API and asset services.
+
+## API backend
+
+The repository also contains an earlier copy of the [Deadlock API](https://github.com/deadlock-api/deadlock-api) backend.
+The remaining instructions describe that backend.
 
 [![Rust CI/CD](https://github.com/deadlock-api/deadlock-api-rust/actions/workflows/rust.yml/badge.svg)](https://github.com/deadlock-api/deadlock-api-rust/actions/workflows/rust.yml)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/deadlock-api/deadlock-api-rust)
@@ -53,8 +73,8 @@ The API is built with:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/deadlock-api/deadlock-api-rust.git
-   cd deadlock-api-rust
+   gh repo clone sxndmxn/deadlock-build-creator
+   cd deadlock-build-creator
    ```
 
 2. Install the Protocol Buffers compiler:
